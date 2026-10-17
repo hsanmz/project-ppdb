@@ -59,7 +59,9 @@ class RefreshToken(Base):
     user_agent: Mapped[str | None] = mapped_column(
         String(512), nullable=True, default=None
     )
-    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    ip_address: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, default=None
+    )
     app: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, default=None

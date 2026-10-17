@@ -15,7 +15,10 @@ Aplikasi ini adalah **backend utama** untuk seluruh ekosistem Pesantren Tahfidz 
 ## 🚀 Peran & Tanggung Jawab (Fitur Inti)
 
 - 🔐 **Otorisasi Terpusat & Keamanan:** Sistem RBAC (Role-Based Access Control) berbasis HTTP-only Cookie JWT untuk Pendaftar, Admin PPDB, Penguji/Pewawancara, dan Superadmin.
+- 🛡️ **Pelacakan Sesi & Keamanan Multi-Perangkat:** Deteksi metadata login (browser, OS, device, IP) dengan kemampuan pemantauan sesi aktif dan pemutusan sesi jarak jauh (*remote session revocation*).
+- 🔍 **Pencarian Global Terpadu (`/search/global`):** Pencarian modular cepat lintas pendaftar, berita, program, fasilitas, staf, akun pengguna, dan log aktivitas audit sesuai level RBAC.
 - 🚦 **Transaksi PPDB & Gelombang (Atomik):** Mengatur validasi periode tunggal, alokasi gelombang otomatis, kuota pendaftaran, dan pembatalan otomatis invoice pending saat kuota terpenuhi.
+- 👤 **Profil Mandiri Pendaftar (`/ppdb/applicants/me`):** Pembacaan dan pembaruan mandiri data pendaftar dan kuesioner kesehatan dengan penguncian otomatis pasca-kelulusan.
 - 💳 **Integrasi Payment Gateway Pakasir API v2:**
   - Pembuatan QRIS dinamis untuk pembayaran formulir dan pembayaran Tahap 2 (DP & cicilan).
   - Webhook 1 Pintu terverifikasi dengan header `X-Secret` dan idempotency guard.

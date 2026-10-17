@@ -33,6 +33,7 @@ from src.modules.ppdb.schemas import (
     ApplicantAdminUpdate,
     ApplicantChangePath,
     ApplicantPasswordReset,
+    ApplicantProfileUpdate,
     ApplicantRegister,
     DocumentVerify,
     LoASignatureRequest,
@@ -560,6 +561,28 @@ def create_applicant(
     return service.create_applicant(body)
 
 
+@router.get("/applicants/me")
+def get_my_applicant(
+    user: dict[str, Any] = Depends(get_current_user),
+    service: PPDBService = Depends(get_ppdb_service),
+):
+    """Ambil data formulir pendaftar untuk user calon santri yang sedang login."""
+    return service.get_my_applicant_profile(user["id"])
+
+
+@router.put("/applicants/me")
+def update_my_applicant(
+    body: ApplicantProfileUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    service: PPDBService = Depends(get_ppdb_service),
+):
+    """Pembaruan mandiri formulir pendaftaran oleh calon santri.
+
+    Dapat diubah selama proses seleksi hingga lulus tes / LoA resmi diterbitkan.
+    """
+    return service.update_my_applicant_profile(user["id"], body)
+
+
 @router.get("/applicants/{id}")
 def get_applicant(
     id: str,
@@ -573,7 +596,6 @@ def get_applicant(
 def update_applicant(
     id: str,
     body: ApplicantAdminUpdate,
-    ApplicantChangePath,
     user: dict = Depends(require_ppdb_admin),
     service: PPDBService = Depends(get_ppdb_service),
 ):

@@ -295,7 +295,7 @@ export function DeviceSessionsCard({
                       onClick={() => onRevoke(session.id)}
                       disabled={revokingId === session.id}
                       className="h-7 px-2 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900/40 gap-1 rounded-lg shrink-0"
-                      title="Keluarkan sesi ini"
+                      title="Logout sesi ini"
                     >
                       {revokingId === session.id ? (
                         <>
@@ -305,7 +305,7 @@ export function DeviceSessionsCard({
                       ) : (
                         <>
                           <LogOut className="h-3 w-3" />
-                          <span>Keluarkan</span>
+                          <span>Logout</span>
                         </>
                       )}
                     </Button>

@@ -147,18 +147,18 @@ export default function PublicLoaPage() {
     : 'Kembali ke Review LoA Admin'
 
   return (
-    <div className="min-h-screen bg-slate-100/90 text-slate-900 py-6 sm:py-10 px-3 sm:px-6 flex flex-col items-center">
+    <div className="min-h-screen bg-slate-100 text-slate-900 py-6 sm:py-10 px-3 sm:px-6 flex flex-col items-center">
       {/* Container untuk Render LoA Resmi A4 (Presisi Tanpa Kotoran Modal/Layar) */}
       {data && (
         <div
           id="loa-export-container"
           className="print:hidden"
           style={{
-            position: 'absolute',
-            left: '-9999px',
+            position: 'fixed',
+            left: '-99999px',
             top: 0,
             width: '210mm',
-            visibility: 'visible',
+            zIndex: -99999,
             pointerEvents: 'none',
           }}
           aria-hidden="true"

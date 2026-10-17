@@ -31,12 +31,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ptdarrahman")
 
+
 # Filter untuk menyembunyikan log uvicorn access yang mengejek /v1/models
 # (terutama untuk IDE/tooling auto-discovery yang menghasilkan 404 Not Found).
-import logging
-
 class IdeErrorFilter(logging.Filter):
     """Filter untuk menyaring log access uvicorn yang mengandung path /v1/models."""
+
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
         # Filter log yang berisi "GET ... /v1/models" dan "404 Not Found"
@@ -198,6 +198,7 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+
 
 # --- Route kustom /v1/models untuk mencegah 404 Not Found
 # Route ini didaftar setelah app dibuat, sehingga tidak bentrok dengan

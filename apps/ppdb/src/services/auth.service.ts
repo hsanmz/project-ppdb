@@ -20,4 +20,11 @@ export const authService = {
   },
   getSessions: () => apiFetch<{ sessions?: ProfileSession[] }>('/auth/sessions'),
   revokeSession: (id: string) => apiFetch<{ message?: string }>(`/auth/sessions/${id}`, { method: 'DELETE' }),
+  getMyApplicant: () =>
+    apiFetch<{ applicant: any; is_locked?: boolean; lock_reason?: string | null }>('/ppdb/applicants/me'),
+  updateMyApplicant: (data: any) =>
+    apiFetch<{ success: boolean; message: string; applicant: any }>('/ppdb/applicants/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 }

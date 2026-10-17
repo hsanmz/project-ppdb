@@ -68,9 +68,7 @@ export default function ApplicantLoAModal({
   })
 
   const handleDownload = async (format: 'pdf' | 'image') => {
-    const targetElement = format === 'pdf'
-      ? (activePage === 'both' ? (documentContainerRef.current || hiddenExportRef.current) : (hiddenExportRef.current || documentContainerRef.current))
-      : (documentContainerRef.current || hiddenExportRef.current)
+    const targetElement = hiddenExportRef.current || documentContainerRef.current
 
     if (!targetElement) {
       toast('error', 'Dokumen LoA belum siap diunduh. Mohon tunggu sebentar.')
@@ -332,11 +330,11 @@ export default function ApplicantLoAModal({
           ref={hiddenExportRef}
           className="print:hidden"
           style={{
-            position: 'absolute',
-            left: '-9999px',
+            position: 'fixed',
+            left: '-99999px',
             top: 0,
             width: '210mm',
-            visibility: 'visible',
+            zIndex: -99999,
             pointerEvents: 'none',
           }}
           aria-hidden="true"

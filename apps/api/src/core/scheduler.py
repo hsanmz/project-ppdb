@@ -201,7 +201,7 @@ def cleanup_expired_sessions(db: Session | None = None) -> int:
         should_close = True
     try:
         now = datetime.datetime.now(WIB)
-        deleted = (
+        deleted = int(
             db.query(RefreshToken)
             .filter((RefreshToken.revoked.is_(True)) | (RefreshToken.expires_at <= now))
             .delete(synchronize_session=False)

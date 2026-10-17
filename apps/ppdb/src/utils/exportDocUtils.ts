@@ -53,6 +53,8 @@ export async function waitForDocumentAssets(element: HTMLElement): Promise<void>
 export interface CaptureCanvasOptions {
   scale?: number
   backgroundColor?: string
+  width?: number
+  height?: number
 }
 
 /**
@@ -69,8 +71,8 @@ export async function captureElementToCanvas(
 
   // Hitung bounding rect bulat presisi agar tidak terjadi pergeseran subpixel
   const rect = element.getBoundingClientRect()
-  const width = Math.round(rect.width) || element.offsetWidth || 794
-  const height = Math.round(rect.height) || element.offsetHeight || 1123
+  const width = options?.width || Math.round(rect.width) || element.offsetWidth || 794
+  const height = options?.height || Math.round(rect.height) || element.offsetHeight || 1123
 
   const canvas = await html2canvas(element, {
     scale,
@@ -79,22 +81,41 @@ export async function captureElementToCanvas(
     backgroundColor,
     width,
     height,
-    windowWidth: 1280,
+    windowWidth: Math.max(1280, width),
     scrollX: 0,
     scrollY: 0,
     onclone: (_clonedDoc, clonedEl) => {
-      // Pastikan elemen kloningan memiliki opacity 1 dan tidak terkena efek transform/box-shadow
+      // 1. Pastikan seluruh chain parent di cloned doc visible dan opacity 1
+      let currentParent: HTMLElement | null = clonedEl.parentElement
+      while (currentParent && currentParent !== _clonedDoc.body) {
+        currentParent.style.opacity = '1'
+        currentParent.style.visibility = 'visible'
+        if (currentParent.style.position === 'absolute' || currentParent.style.position === 'fixed') {
+          // Reset coordinate offscreen agar canvas tidak memotong elemen
+          currentParent.style.left = '0'
+          currentParent.style.top = '0'
+        }
+        currentParent = currentParent.parentElement
+      }
+
+      // 2. Pastikan elemen kloningan memiliki opacity 1 dan tidak terkena efek transform/box-shadow
       clonedEl.style.opacity = '1'
       clonedEl.style.visibility = 'visible'
       clonedEl.style.transform = 'none'
       clonedEl.style.boxShadow = 'none'
+      if (clonedEl.style.position === 'absolute' || clonedEl.style.position === 'fixed') {
+        clonedEl.style.left = '0'
+        clonedEl.style.top = '0'
+      }
 
-      // Reset letter-spacing pada anak elemen untuk mencegah bug glyph bounding-box html2canvas
+      // 3. Reset letter-spacing pada anak elemen untuk mencegah bug glyph bounding-box html2canvas
       const allElements = clonedEl.querySelectorAll<HTMLElement>('*')
       allElements.forEach((el) => {
         if (el.style.letterSpacing) {
           el.style.letterSpacing = 'normal'
         }
+        // Pastikan font smoothing optimal
+        ;(el.style as any).webkitFontSmoothing = 'antialiased'
       })
     },
   })

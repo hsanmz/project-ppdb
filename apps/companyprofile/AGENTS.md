@@ -23,7 +23,12 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
   - `/admin/login` — Redirect shim ke `/auth/login`
   - `/admin/overview` — Dashboard overview page (stats + per-section links into `/admin/dashboard`).
   - `/admin/dashboard` — Main CRUD dashboard (10 tabs, supports deep-link `?tab=...`).
+  - `/admin/profile` — Profile page for website admin (uses `@repo/ui/profile` with avatar editor, change password, and active device sessions).
   - `/admin` — Redirects to `/admin/overview` if `admin_user` exists in localStorage, else `/auth/login`.
+
+## Visual & 3D Hero Globe
+- **Hero 3D Globe:** Implementation in `components/ui/orbit-delivery-hero.tsx` (Three.js custom canvas) and decorative section waves (`HeroWaveSVG.tsx`, `CTAShapeDivider.tsx`).
+- For 3D architecture, model assets in `public/models/`, and procedural vs GLB globe caveats, see [**docs/HERO_3D_GLOBE.md**](../../docs/HERO_3D_GLOBE.md).
 
 ## Key Conventions
 - **Route Group**: `app/(main)/` contains all public pages wrapped with Navbar and Footer.

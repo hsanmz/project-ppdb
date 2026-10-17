@@ -12,7 +12,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui'
-import { Printer, Award, Building2, QrCode, Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { Printer, Award, Building2, Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { useToast } from '@/components/Toast'
 import { downloadSkdPdf, downloadSkdImage } from '@/utils/exportSkd'
 
@@ -36,6 +37,7 @@ export default function ApplicantSKDModal({
 }: ApplicantSKDModalProps) {
   const { toast } = useToast()
   const printRef = useRef<HTMLDivElement>(null)
+  const exportRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState<'pdf' | 'image' | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -52,12 +54,15 @@ export default function ApplicantSKDModal({
   const applicant = data?.applicant
   const letterNumber = data?.letter_number || `SKD/PPDB/${new Date().getFullYear()}/${strLimit(applicantId, 8).toUpperCase()}`
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ptdarrahman.sch.id'
+  const verifyUrl = `${baseUrl}/receipt/${applicant?.id || applicantId}`
+
   const handlePrint = () => {
     window.print()
   }
 
   const handleDownloadPdf = async () => {
-    const el = printRef.current
+    const el = exportRef.current || printRef.current
     if (!el || !applicant) {
       toast('error', 'Dokumen SKD belum siap diunduh.')
       return
@@ -74,7 +79,7 @@ export default function ApplicantSKDModal({
   }
 
   const handleDownloadImage = async () => {
-    const el = printRef.current
+    const el = exportRef.current || printRef.current
     if (!el || !applicant) {
       toast('error', 'Dokumen SKD belum siap diunduh.')
       return
@@ -122,8 +127,17 @@ export default function ApplicantSKDModal({
         <div className="absolute bottom-4 left-4 w-7 h-7 border-b-2 border-l-2 border-amber-400 pointer-events-none" />
         <div className="absolute bottom-4 right-4 w-7 h-7 border-b-2 border-r-2 border-amber-400 pointer-events-none" />
 
-        {/* Radial Center Glow */}
-        <div className="absolute inset-0 bg-radial from-amber-400/5 via-transparent to-black/40 pointer-events-none" />
+        {/* Radial Center Glow via clean SVG gradient for universal compatibility */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="skd-radial-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.08" />
+              <stop offset="60%" stopColor="#022c22" stopOpacity="0.02" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.4" />
+            </radialGradient>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#skd-radial-glow)" />
+        </svg>
 
         {/* Certificate Content */}
         <div className="relative z-10 flex-1 flex flex-col justify-between text-center px-6 py-2">
@@ -188,8 +202,8 @@ export default function ApplicantSKDModal({
           <div className="grid grid-cols-3 items-end pt-2 border-t border-amber-500/30">
             {/* Left: QR Code Verification */}
             <div className="text-left flex items-center gap-2.5">
-              <div className="p-1 rounded bg-white/10 border border-amber-400/40 text-amber-300">
-                <QrCode className="h-8 w-8" />
+              <div className="p-1 rounded bg-white border border-amber-400/40 text-slate-900 shadow-2xs">
+                <QRCodeSVG value={verifyUrl} size={36} level="M" />
               </div>
               <div className="space-y-0.5">
                 <span className="text-[9px] font-bold block text-white">
@@ -364,6 +378,26 @@ export default function ApplicantSKDModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Kontainer Render Isolasi Sertifikat SKD Landscape Resmi (Presisi Tanpa Scroll Modal) */}
+      {applicant && (
+        <div
+          ref={exportRef}
+          className="print:hidden"
+          style={{
+            position: 'fixed',
+            left: '-99999px',
+            top: 0,
+            width: '297mm',
+            height: '210mm',
+            zIndex: -99999,
+            pointerEvents: 'none',
+          }}
+          aria-hidden="true"
+        >
+          {renderCertificateContent()}
+        </div>
+      )}
     </Dialog>
   )
 }

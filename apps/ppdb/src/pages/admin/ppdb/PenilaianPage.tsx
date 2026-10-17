@@ -610,11 +610,10 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
         className="print:hidden"
         style={{
           position: 'fixed',
-          left: 0,
+          left: '-99999px',
           top: 0,
           width: '210mm',
-          zIndex: -1000,
-          opacity: 0,
+          zIndex: -99999,
           pointerEvents: 'none',
         }}
         aria-hidden="true"

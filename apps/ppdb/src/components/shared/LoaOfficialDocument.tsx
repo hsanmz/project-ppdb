@@ -85,7 +85,7 @@ export default function LoaOfficialDocument({ data, page = 'both' }: LoaOfficial
         <span>Page 1 Of 2</span>
       </div>
 
-      <div className="flex-1 flex flex-col justify-between py-0.5">
+      <div className="flex-1 flex flex-col justify-start gap-1.5 py-0.5">
         {/* Letter Head Top */}
         <div className="flex justify-between items-start">
           <div>
@@ -250,7 +250,7 @@ export default function LoaOfficialDocument({ data, page = 'both' }: LoaOfficial
         </div>
 
         {/* Signatures Page 1 */}
-        <div className="pt-2 flex justify-between items-end border-t border-slate-200">
+        <div className="pt-2 flex justify-between items-end border-t border-slate-200 mt-auto">
           {/* Pihak 1: Orang Tua / Wali */}
           <div className="w-72 border border-dashed border-slate-300 rounded-lg p-2 text-center bg-slate-50/70">
             <p className="text-[10px] text-slate-600 font-bold uppercase leading-tight">
@@ -342,7 +342,7 @@ export default function LoaOfficialDocument({ data, page = 'both' }: LoaOfficial
         <span>Page 2 Of 2</span>
       </div>
 
-      <div className="flex-1 flex flex-col justify-between py-0.5">
+      <div className="flex-1 flex flex-col justify-start gap-1.5 py-0.5">
         {/* Header Page 2 */}
         <div className="text-center py-1.5 border-b-2 border-slate-900 mb-0.5 bg-slate-50/60">
           <h1 className="text-base font-extrabold text-slate-900 uppercase">
@@ -489,7 +489,7 @@ export default function LoaOfficialDocument({ data, page = 'both' }: LoaOfficial
         </div>
 
         {/* Signatures Page 2 */}
-        <div className="pt-2 flex justify-between items-end border-t border-slate-200">
+        <div className="pt-2 flex justify-between items-end border-t border-slate-200 mt-auto">
           <div className="text-left space-y-0.5">
             <p className="text-[10px] text-slate-500 font-semibold">Pusat Bantuan & Layanan Informasi Resmi:</p>
             <p className="text-xs font-bold text-slate-800">WhatsApp Call Center: 0815-1004-0999</p>

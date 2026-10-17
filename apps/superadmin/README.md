@@ -22,7 +22,8 @@ Di panel ini, **Superadmin** mengelola akun pengguna, matriks hak akses/role (RB
 - 🕘 **Aktivitas:** Jejak audit (*audit trail*) aktivitas pengguna dan admin.
 - 🔔 **Notifikasi:** Melihat riwayat pengiriman notifikasi dan mengirim notifikasi kustom ke nomor tujuan.
 - 📱 **WhatsApp Bridge:** Memantau status koneksi bot WhatsApp, scan QR code otorisasi, dan tes koneksi.
-- 👤 **Profil:** Memperbarui profil personal superadmin (avatar, nama, dan kata sandi).
+- 🧠 **Semantic Search & Quick Action (`Ctrl+K`):** Pencarian semantik cerdas bertenaga pemrosesan bahasa alami di header dashboard untuk mencari menu, data pendaftar, pintasan, dan eksekusi aksi navigasi cepat.
+- 👤 **Profil & Manajemen Sesi:** Memperbarui profil personal superadmin (avatar editor, nama, dan kata sandi), serta memantau dan mencabut sesi perangkat aktif dari jarak jauh.
 
 > **Catatan:** Operasional PPDB harian (gelombang, verifikasi dokumen, pembayaran formulir/cicilan, penjadwalan sesi 1:1, penilaian evaluator, penerbitan LoA/SKD, dan pencarian arsip dossier) berada di aplikasi [`apps/ppdb`](../ppdb/README.md), bukan di panel Superadmin ini.
 

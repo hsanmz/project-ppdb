@@ -21,10 +21,10 @@ Project ini menggunakan arsitektur modular **pnpm workspace** yang diorkestrasi 
 
 | Aplikasi | Path | Tech Stack | Fungsi & Fitur Utama |
 |----------|------|------------|-----------------------|
-| 🎓 **PPDB (Portal Santri & Backoffice)** | [`apps/ppdb`](apps/ppdb/README.md) | React 19, Vite 8 | **Portal Santri:** Form pendaftaran 7 tahap (tanpa jenjang), verifikasi kuesioner kesehatan 10 soal, ujian TIU via Safe Exam Browser (SEB), booking sesi 1:1 Tahfidz & Wawancara, pembayaran QRIS Pakasir v2, skema cicilan tahap 2, tanda tangan LoA digital, dan SKD.<br>**Backoffice:** Manajemen gelombang, verifikasi dokumen, input nilai rubrik, monitoring keuangan, dan arsip dossier ZIP. |
-| 🛡️ **Superadmin** | [`apps/superadmin`](apps/superadmin/README.md) | React 19, Vite 8 | Panel manajemen platform: akun staf/admin, matriks role & permission modul (RBAC), log aktivitas (*audit trail*), broadcast notifikasi, dan monitoring bot WhatsApp. |
-| 🌐 **Company Profile** | [`apps/companyprofile`](apps/companyprofile/README.md) | Next.js 16, Tailwind v4 | Website publik pesantren, informasi program pendidikan, berita, fasilitas, galeri, hero 3D interaktif Three.js, dan portal login terpusat. |
-| ⚙️ **Core API** | [`apps/api`](apps/api/README.md) | FastAPI, MySQL, Redis | Backend REST API monolithic: autentikasi HTTP-only Cookie JWT, payment gateway Pakasir API v2 (QRIS dinamis), webhook Google Apps Script TIU, scheduler cicilan, dan generator berkas resmi. |
+| 🎓 **PPDB (Portal Santri & Backoffice)** | [`apps/ppdb`](apps/ppdb/README.md) | React 19, Vite 8 | **Portal Santri:** Form pendaftaran 7 tahap (tanpa jenjang), verifikasi kuesioner kesehatan 10 soal, profil mandiri pendaftar, ujian TIU via Safe Exam Browser (SEB), booking sesi 1:1 Tahfidz & Wawancara, pembayaran QRIS Pakasir v2, skema cicilan tahap 2, tanda tangan LoA digital, SKD, dan manajemen sesi perangkat.<br>**Backoffice:** Manajemen gelombang, verifikasi dokumen, input nilai rubrik, monitoring keuangan & detail cicilan tahap 2 (`/admin/pembayaran-tahap2/:id`), cetak dokumen resmi (Formulir, Lembar Penilaian, Kuitansi, LoA, SKD), dan arsip dossier ZIP. |
+| 🛡️ **Superadmin** | [`apps/superadmin`](apps/superadmin/README.md) | React 19, Vite 8 | Panel manajemen platform: akun staf/admin, matriks role & permission modul (RBAC), log aktivitas (*audit trail*), broadcast notifikasi, monitoring bot WhatsApp, pencarian cerdas semantik (*semantic search* `Ctrl+K`), dan pemantauan sesi login aktif. |
+| 🌐 **Company Profile** | [`apps/companyprofile`](apps/companyprofile/README.md) | Next.js 16, Tailwind v4 | Website publik pesantren, informasi program pendidikan, berita, fasilitas, galeri, hero 3D interaktif Three.js, profil admin, dan portal login terpusat. |
+| ⚙️ **Core API** | [`apps/api`](apps/api/README.md) | FastAPI, MySQL, Redis | Backend REST API monolithic: autentikasi HTTP-only Cookie JWT, modular global search (`/search/global`), pelacakan & revokasi sesi perangkat aktif, payment gateway Pakasir API v2 (QRIS dinamis), webhook Google Apps Script TIU, scheduler cicilan, dan generator berkas resmi. |
 | 📱 **WA Gateway** | [`apps/whatsapp`](apps/whatsapp/README.md) | Node.js, BullMQ, Express | Service mandiri berbasis `whatsapp-web.js` & Chromium untuk pengiriman notifikasi otomatis realtime via task queue Redis. |
 
 ---
@@ -49,6 +49,8 @@ Untuk memudahkan verifikasi keabsahan dokumen pendaftar secara langsung via pemi
 - 💻 [**Panduan Ujian TIU di SEB (docs/PANDUAN_UJIAN_TIU_SEB.md)**](docs/PANDUAN_UJIAN_TIU_SEB.md) — Panduan instalasi dan penggunaan Safe Exam Browser.
 - 🔗 [**Integrasi Webhook TIU Apps Script (docs/INTEGRASI_TIU_APPS_SCRIPT.md)**](docs/INTEGRASI_TIU_APPS_SCRIPT.md) — Skrip Google Apps Script untuk sinkronisasi nilai kuis TIU.
 - 🔔 [**Spesifikasi Notifikasi WhatsApp (docs/notifikasi-code-1790904241894.md)**](docs/notifikasi-code-1790904241894.md) — Alur template pesan notifikasi WhatsApp.
+- 🌍 [**Catatan Teknis Hero 3D Globe (docs/HERO_3D_GLOBE.md)**](docs/HERO_3D_GLOBE.md) — Arsitektur Three.js, penyesuaian aset, dan optimasi performa 3D globe.
+- 🛠️ [**Dokumentasi Skrip & Tooling (scripts/README.md)**](scripts/README.md) — Skrip sinkronisasi Windows-WSL, normalisasi LF, dan utilitas debugging.
 
 ---
 

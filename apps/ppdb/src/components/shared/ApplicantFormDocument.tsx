@@ -147,9 +147,9 @@ export default function ApplicantFormDocument({
         minHeight: '297mm',
         maxHeight: '297mm',
         boxSizing: 'border-box',
-        padding: '10mm 14mm 10mm 14mm',
+        padding: '8mm 12mm 8mm 12mm',
       }}
-      className="applicant-form-page a4-document-page relative bg-white mx-auto shadow-md flex flex-col justify-between overflow-hidden text-slate-900 border border-slate-200 mb-6 print:mb-0 print:shadow-none print:border-none print:p-[10mm_14mm] page-break-after"
+      className="applicant-form-page a4-document-page relative bg-white mx-auto shadow-md flex flex-col justify-between overflow-hidden text-slate-900 border border-slate-200 mb-6 print:mb-0 print:shadow-none print:border-none print:p-[8mm_12mm] page-break-after"
     >
       <div>
         {renderKop()}
@@ -404,13 +404,13 @@ export default function ApplicantFormDocument({
         minHeight: '297mm',
         maxHeight: '297mm',
         boxSizing: 'border-box',
-        padding: '10mm 14mm 10mm 14mm',
+        padding: '8mm 12mm 8mm 12mm',
       }}
-      className="applicant-form-page a4-document-page relative bg-white mx-auto shadow-md flex flex-col justify-between overflow-hidden text-slate-900 border border-slate-200 print:shadow-none print:border-none print:p-[10mm_14mm]"
+      className="applicant-form-page a4-document-page relative bg-white mx-auto shadow-md flex flex-col justify-between overflow-hidden text-slate-900 border border-slate-200 print:shadow-none print:border-none print:p-[8mm_12mm]"
     >
       <div>
         {/* Header Lanjutan Lembar 2 */}
-        <div className="border-b-2 border-emerald-900 pb-2 mb-3 flex items-center justify-between">
+        <div className="border-b-2 border-emerald-900 pb-2 mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {logoUrl ? (
               <img
@@ -442,7 +442,7 @@ export default function ApplicantFormDocument({
         </div>
 
         {/* BAGIAN 4: KUESIONER IDENTIFIKASI RIWAYAT KESEHATAN (10 BUTIR BAKU) */}
-        <div className="border border-slate-200 rounded-lg p-3 mb-3 bg-slate-50/40">
+        <div className="border border-slate-200 rounded-lg p-2.5 mb-2 bg-slate-50/40">
           <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
             <h3 className="font-extrabold text-[11px] uppercase tracking-wide text-emerald-900 flex items-center gap-1.5">
               <span className="w-1.5 h-3.5 bg-emerald-700 rounded-xs inline-block" />
@@ -634,8 +634,8 @@ export default function ApplicantFormDocument({
         </div>
 
         {/* BAGIAN 5: LEMBAR PERNYATAAN KELUARGA */}
-        <div className="border border-slate-200 rounded-lg p-2 mb-2 bg-white text-[9.5px] space-y-1">
-          <div className="flex items-center gap-1.5 text-emerald-900 font-bold uppercase tracking-wider text-[10px]">
+        <div className="border border-slate-200 rounded-lg p-1.5 mb-1.5 bg-white text-[9px] space-y-0.5">
+          <div className="flex items-center gap-1.5 text-emerald-900 font-bold uppercase tracking-wider text-[9.5px]">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
             <span>5. Pernyataan Keabsahan Data & Tata Tertib Pesantren</span>
           </div>
@@ -648,7 +648,7 @@ export default function ApplicantFormDocument({
         </div>
 
         {/* BAGIAN 6: LEMBAR PENGESAHAN & TANDA TANGAN (Persis Format LoA) */}
-        <div className="pt-1.5 flex justify-between items-end border-t border-slate-200 mt-1">
+        <div className="pt-1.5 flex justify-between items-end border-t border-slate-200 mt-auto">
           {/* Kolom Kiri: Layanan Bantuan Resmi (Persis Format LoA) */}
           <div className="text-left space-y-0.5">
             <p className="text-[9.5px] text-slate-500 font-semibold uppercase tracking-wider">
@@ -716,7 +716,7 @@ export default function ApplicantFormDocument({
             height: 297mm !important;
             min-height: 297mm !important;
             max-height: 297mm !important;
-            padding: 10mm 14mm !important;
+            padding: 8mm 12mm !important;
             margin: 0 auto !important;
             box-shadow: none !important;
             border: none !important;

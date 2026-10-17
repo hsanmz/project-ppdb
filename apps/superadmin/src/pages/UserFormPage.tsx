@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, KeyRound, UserRound, ShieldCheck, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, KeyRound, Trash2, UserRound, ShieldCheck, CheckCircle2 } from 'lucide-react'
 import PageHero from '../components/PageHero'
 import * as api from '../api/client'
 import { useToast } from '../components/Toast'
@@ -55,7 +55,7 @@ export default function UserFormPage() {
   const queryClient = useQueryClient()
 
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [confirmData, setConfirmData] = useState<{ title: string; message: string; variant?: 'danger' | 'primary'; confirmLabel?: string; onConfirm: () => void } | null>(null)
 
   useEffect(() => {
     if (!authLoading && currentUser && !canCrud) {
@@ -68,6 +68,7 @@ export default function UserFormPage() {
   const [restrictedPages, setRestrictedPages] = useState<Record<string, string[]>>({})
   const [hasPageRestrictions, setHasPageRestrictions] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [fetching, setFetching] = useState(isEdit)
 
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue, control } = useForm<UserFormValues>({
@@ -225,6 +226,31 @@ export default function UserFormPage() {
     }
   }
 
+  function handleDelete() {
+    if (!id || deleting) return
+    setConfirmData({
+      title: 'Hapus User',
+      message: `Yakin ingin menghapus user "${formUsername}"? Tindakan ini tidak dapat dibatalkan.`,
+      variant: 'danger',
+      confirmLabel: 'Ya, Hapus',
+      onConfirm: async () => {
+        setConfirmOpen(false)
+        setDeleting(true)
+        try {
+          await api.deleteUser(id)
+          toast('success', 'User berhasil dihapus')
+          queryClient.invalidateQueries({ queryKey: ['users'] })
+          navigate('/users')
+        } catch (e: any) {
+          toast('error', e.message || 'Gagal menghapus user')
+        } finally {
+          setDeleting(false)
+        }
+      },
+    })
+    setConfirmOpen(true)
+  }
+
   function togglePageRestriction(moduleKey: string, pageId: string) {
     setRestrictedPages(prev => {
       const current = prev[moduleKey] || []
@@ -260,7 +286,8 @@ export default function UserFormPage() {
         onConfirm={() => confirmData?.onConfirm()}
         title={confirmData?.title || 'Konfirmasi'}
         message={confirmData?.message || ''}
-        confirmLabel="Sudah Benar, Simpan"
+        variant={confirmData?.variant}
+        confirmLabel={confirmData?.confirmLabel || 'Sudah Benar, Simpan'}
       />
     <div className="mx-auto max-w-2xl space-y-6 animate-fadeIn">
       <PageHero
@@ -480,6 +507,17 @@ export default function UserFormPage() {
         )}
 
         <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+          {isEdit && formUserType !== 'superadmin' && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mr-auto border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleDelete}
+              disabled={loading || deleting}
+            >
+              <Trash2 className="h-4 w-4 mr-1" /> Hapus User
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"

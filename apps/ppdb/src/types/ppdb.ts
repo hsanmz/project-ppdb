@@ -49,22 +49,33 @@ export interface Applicant {
   address?: string
   parent_name?: string
   father_name?: string
+  father_nik?: string
   father_job?: string
   father_phone?: string
+  father_education?: string
   mother_name?: string
+  mother_nik?: string
   mother_job?: string
   mother_phone?: string
+  mother_education?: string
   guardian_name?: string
+  guardian_nik?: string
   guardian_job?: string
+  guardian_phone?: string
+  guardian_relation?: string
   parent_phone?: string
   parent_income?: string
   parent_email?: string
   previous_school?: string
+  registration_no?: string | null
   disease_history?: string
   is_loa_signed?: boolean
   loa_signed_at?: string | null
   loa_signer_name?: string | null
   loa_signer_relation?: string | null
+  avatar_url?: string | null
+  is_locked?: boolean
+  lock_reason?: string | null
   created_at: string
   updated_at?: string
 }

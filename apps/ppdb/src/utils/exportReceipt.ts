@@ -39,15 +39,25 @@ export async function downloadReceiptPdf(
     compress: true,
   })
 
-  // Tempatkan kuitansi secara proporsional dengan margin fisik yang rapi (15mm samping)
-  const marginX = 15
-  const printableWidth = 210 - marginX * 2
-  const imgHeight = (canvas.height * printableWidth) / canvas.width
+  // Tempatkan kuitansi secara proporsional dengan margin fisik yang rapi tanpa distorsi aspect ratio
+  const maxW = 180 // 210mm - 2 * 15mm
+  const maxH = 267 // 297mm - 2 * 15mm
 
-  // Posisikan di tengah vertikal bila muat, atau gunakan margin atas bila tinggi
-  const marginY = imgHeight <= 267 ? Math.max(15, (297 - imgHeight) / 2) : 15
+  let targetW = maxW
+  let targetH = (canvas.height * targetW) / canvas.width
 
-  pdf.addImage(imgData, 'PNG', marginX, marginY, printableWidth, Math.min(imgHeight, 267), undefined, 'FAST')
+  // Jika tinggi melebihi area cetak maksimum, turunkan kedua dimensi secara proporsional
+  if (targetH > maxH) {
+    targetH = maxH
+    targetW = (canvas.width * targetH) / canvas.height
+  }
+
+  // Posisikan presisi di tengah kertas A4 baik horizontal maupun vertikal
+  const marginX = (210 - targetW) / 2
+  const marginY = (297 - targetH) / 2
+
+  // Gunakan kompresi lossless ('NONE') agar teks, garis tabel, dan QR code tetap tajam
+  pdf.addImage(imgData, 'PNG', marginX, marginY, targetW, targetH, undefined, 'NONE')
   pdf.save(`${baseFilename}.pdf`)
 }
 

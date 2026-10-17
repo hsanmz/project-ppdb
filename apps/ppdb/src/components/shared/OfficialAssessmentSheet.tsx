@@ -134,9 +134,9 @@ const OfficialAssessmentSheet = forwardRef<HTMLDivElement, OfficialAssessmentShe
           minHeight: '297mm',
           maxHeight: '297mm',
           boxSizing: 'border-box',
-          padding: '10mm 14mm 10mm 14mm',
+          padding: '8mm 12mm 8mm 12mm',
         }}
-        className="official-assessment-sheet a4-document-page bg-white text-slate-900 font-sans text-xs flex flex-col justify-between overflow-hidden selection:bg-none shadow-xl border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-[10mm_14mm]"
+        className="official-assessment-sheet a4-document-page bg-white text-slate-900 font-sans text-xs flex flex-col justify-between overflow-hidden selection:bg-none shadow-xl border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-[8mm_12mm]"
       >
         <div className="space-y-2 flex-1 flex flex-col justify-start">
           {/* ═══════════════════════════════════════════

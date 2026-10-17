@@ -261,9 +261,8 @@ export default function TIUSettingsPage() {
         </Card>
       </div>
 
-      {/* ── KANAN: Panduan Integrasi (nempel pojok kanan, tanpa Card, scroll tanpa scrollbar) ── */}
+      {/* ── KANAN: Panduan Integrasi ── */}
       <aside className="w-full lg:w-[380px] xl:w-[420px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200/80 bg-slate-50/50 p-4 sm:p-6 flex flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {/* Header Panduan (Simple, no card container) */}
         <div className="flex items-center gap-2.5 pb-4 mb-5 border-b border-slate-200/70 shrink-0">
           <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
             <Info className="h-4 w-4" />
@@ -274,13 +273,10 @@ export default function TIUSettingsPage() {
           </div>
         </div>
 
-        {/* Isi Panduan */}
         <div className="space-y-5 text-xs text-slate-600">
           {/* Step 1 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              1
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">1</div>
             <div className="space-y-1">
               <h4 className="font-semibold text-xs text-slate-800">Pertanyaan Token di Google Form</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
@@ -293,9 +289,7 @@ export default function TIUSettingsPage() {
 
           {/* Step 2 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              2
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">2</div>
             <div className="space-y-1">
               <h4 className="font-semibold text-xs text-slate-800">Dapatkan Pre-filled URL</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
@@ -308,13 +302,18 @@ export default function TIUSettingsPage() {
 
           {/* Step 3 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              3
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">3</div>
             <div className="space-y-2.5 min-w-0 flex-1">
               <h4 className="font-semibold text-xs text-slate-800">Pasang Script Webhook</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
-                Buka <strong className="text-slate-700">Ekstensi → Apps Script</strong> di Google Form. Tempel kode di bawah, sesuaikan variabel <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">SECRET</code>, lalu buat pemicu (Trigger) <strong className="text-slate-700">Saat mengirim formulir</strong>.
+                Buka <strong className="text-slate-700">Ekstensi → Apps Script</strong> di Google Form. Tempel kode di bawah, lalu set <strong className="text-slate-700">Script Properties</strong> (<em>Project Settings → Script Properties</em>) dengan:
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-slate-500 space-y-0.5 pl-1">
+                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">PPDB_API_BASE</code> = <strong>URL API publik</strong> (contoh: <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">https://api.ptdarrahman.sch.id</code>) — <span className="text-rose-600 font-medium">Jangan pakai localhost</span></li>
+                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">TIU_WEBHOOK_SECRET</code> = sama persis dengan <strong>Webhook Secret</strong> di halaman ini</li>
+              </ul>
+              <p className="leading-relaxed text-[11px] text-slate-500">
+                Buat Trigger: <strong className="text-slate-700">Triggers → Add Trigger → onSubmit → From form → On form submit</strong>.
               </p>
 
               {/* Code Snippet Box */}
@@ -342,6 +341,29 @@ export default function TIUSettingsPage() {
                 <pre className="p-3 text-[10px] font-mono leading-relaxed text-slate-200 overflow-x-auto whitespace-pre [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {appsScriptCode}
                 </pre>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 4 */}
+          <div className="h-px bg-slate-200/60" />
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">4</div>
+            <div className="space-y-2 min-w-0 flex-1">
+              <h4 className="font-semibold text-xs text-slate-800">Durasi Ujian & Verifikasi Wajib</h4>
+              <div className="p-3 rounded-xl border border-slate-200 bg-white/70 text-[11px] text-slate-500 leading-relaxed space-y-1.5">
+                <p><strong className="text-slate-700">Durasi = Server-side Guard (bukan timer Google Form)</strong>. Saat <code>.seb</code> diunduh, server mencatat <strong className="text-slate-700">waktu mulai</strong>. Webhook menolak submit jika:</p>
+                <code className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px] text-slate-800">waktu_submit &gt; waktu_mulai + durasi_menit + 5_menit_toleransi</code>
+                <p className="text-amber-700 font-medium">Ditolak HTTP 400 & nilai TIDAK tersimpan. Timer Google Form hanya visual.</p>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-white/70 text-[11px] text-slate-500 leading-relaxed space-y-2">
+                <p className="font-semibold text-slate-700">Verifikasi wajib sebelum ujian:</p>
+                <ol className="list-decimal list-inside space-y-1.5 pl-1">
+                  <li><strong className="text-slate-700">Uji Backend (cURL):</strong> Unduh <code>.seb</code> fresh, ambil <code>token</code> dari <code>startURL</code>, kirim POST ke <code>/ppdb/webhook/tiu</code> dengan header <code>X-TIU-Secret</code>. <span className="text-emerald-700">Harus return 200 OK</span>.</li>
+                  <li><strong className="text-slate-700">Cek Apps Script:</strong> Pastikan <code>PPDB_API_BASE</code> pakai <strong>API publik</strong> (bukan localhost). Lihat <strong>Apps Script → Executions</strong> → status <strong>Completed</strong>, log <code>Status Webhook: 200</code>.</li>
+                  <li><strong className="text-slate-700">End-to-End via SEB:</strong> Download <code>.seb</code> baru, jalankan di SEB → Google Form terbuka dengan <strong>Token terisi otomatis</strong> → Submit → Nilai TIU muncul langsung di Dashboard/Admin.</li>
+                </ol>
+                <p className="text-rose-600 font-medium">Jangan hanya mengandalkan copy-paste. Lakukan minimal 1x sebelum hari H.</p>
               </div>
             </div>
           </div>

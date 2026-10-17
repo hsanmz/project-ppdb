@@ -7,6 +7,8 @@ This document provides a technical overview of the Superadmin panel for the Pesa
 - **Language:** TypeScript.
 - **Styling:** Tailwind CSS v3.4.
 - **Components:** `lucide-react` for icons, `sonner` for toast notifications, and Radix UI primitives (`@radix-ui/react-*`) combined with `class-variance-authority`, `clsx`, and `tailwind-merge` for UI components.
+- **Shared UI & Profile:** `@repo/ui` and `@repo/ui/profile` for universal user profile and multi-device active session management.
+- **Semantic Search Engine (`src/components/dashboard/semantic-search/`):** Client-side intelligent search dialog (`Ctrl+K` / `Cmd+K`) parsing natural language intents to navigate pages, run actions, and search PPDB applicants.
 - **Routing:** `react-router-dom` v7.
 
 ## Routing (`src/App.tsx`)
@@ -36,7 +38,8 @@ The application is a Single Page Application (SPA) with the following routes:
 - The `apiFetch` wrapper handles automatic token refresh logic (cookie-based; no manual token injection happens — every request sends `credentials: 'include'`).
 - **Base URL:** Defined via the `VITE_API_URL` environment variable (defaults to `http://localhost:8000` or `http://localhost:8080`).
 - **Endpoints Interacted With:**
-  - **Auth:** `/companyprofile/auth/login`, `/companyprofile/auth/me`, `/companyprofile/auth/refresh`, `/companyprofile/auth/logout`.
+  - **Auth & Sessions:** `/companyprofile/auth/login`, `/companyprofile/auth/me`, `/companyprofile/auth/refresh`, `/companyprofile/auth/logout`, `/companyprofile/auth/sessions`.
+  - **Search:** `/search/global` (Unified global search).
   - **Users:** `/users` (CRUD).
   - **Roles & Permissions:** `/roles` (CRUD), `/modules`, `/users/:id/page-permissions`.
   - **Applicants:** `/ppdb/applicants`, `/ppdb/applicants/:id/password`.

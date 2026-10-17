@@ -113,6 +113,19 @@ Sistem PPDB mengintegrasikan gerbang pembayaran resmi **Pakasir API v2** untuk p
 4. **Penerbitan SKD & Komunitas Resmi:**
    - Setelah DP Tahap 2 berstatus lunas, sistem secara otomatis menerbitkan **Surat Keterangan Diterima (SKD)** bernomor registrasi unik resmi (`REG-{YYYYMMDD}-{XXXX}`).
    - Sistem menampilkan tautan eksklusif untuk bergabung ke **Grup WhatsApp Resmi Santri Baru**.
+5. **Pemantauan Detail Tagihan & Cicilan di Backoffice (`/admin/pembayaran-tahap2/:applicantId`):**
+   - Panitia dapat meninjau buku besar keuangan pendaftar secara individu: status DP, tagihan cicilan yang sedang aktif, tanggal jatuh tempo per termin, log kuitansi resmi, serta status pelunasan menyeluruh.
+
+---
+
+## Standardisasi Dokumen Resmi & Ekspor Cetak
+
+Untuk menjaga integritas arsip dan tampilan dokumen institusi, sistem menerapkan standardisasi layout cetak A4 baku (`apps/ppdb/src/utils/export*`):
+- **Formulir Pendaftaran (`exportApplicantForm`):** Rekapitulasi komprehensif data santri, keluarga, domisili, dan identifikasi kesehatan berstempel digital pesantren.
+- **Lembar Penilaian Seleksi (`exportAssessment` / `OfficialAssessmentSheet`):** Lembar penilaian evaluator berisi skor TIU terverifikasi, kriteria tartil/tahfidz, dan wawancara berbobot.
+- **Kuitansi Resmi (`exportReceipt` / `OfficialReceiptCard`):** Bukti pembayaran berstempel digital dilengkapi kode QR bertoken HMAC yang dapat diverifikasi publik tanpa login (`/kuitansi/:id`).
+- **Surat Penerimaan / LoA (`exportLoa` / `LoaOfficialDocument`):** Surat resmi penerimaan calon santri dengan klausul *non-refundable*, tanda tangan digital/basah wali, dan tautan verifikasi keabsahan (`/loa/:registrationNo`).
+- **Surat Keterangan Diterima / SKD (`exportSkd` / `ApplicantSKDModal`):** Surat resmi dengan nomor registrasi unik `REG-{YYYYMMDD}-{XXXX}` yang diterbitkan pasca-pelunasan DP.
 
 ---
 
@@ -144,8 +157,8 @@ Sistem PPDB mengintegrasikan gerbang pembayaran resmi **Pakasir API v2** untuk p
 - ✅ **Pembayaran Terlambat:** Ditandai sebagai pengecualian pemeriksaan admin (`late_payment_exception`), tidak dipindahkan otomatis.
 - ✅ **Izin Dossier & Audit:** Dibatasi untuk admin berizin (`require_ppdb_admin`), dengan pencatatan jejak audit alamat IP pada setiap ekspor ZIP.
 - ✅ **Kuesioner Kesehatan:** 10 pertanyaan baku wajib tervalidasi lengkap di server saat pendaftaran.
+- ✅ **Pembaruan Mandiri Profil & Kesehatan Santri:** Santri/wali dapat meninjau dan memperbarui data formulir pendaftaran serta identifikasi kesehatan secara mandiri di `/applicant/profile` (`PUT /ppdb/applicants/me`). Pembaruan dibatasi hanya selama proses seleksi berlangsung, dan otomatis dikunci permanen (`is_locked`) sesaat setelah santri dinyatakan lulus dan LoA resmi diterbitkan atau bila admin menguncinya secara manual.
 
 ### Keputusan yang Masih Terbuka (Menunggu Kebijakan Yayasan):
-- Apakah data kesehatan santri boleh diperbarui secara mandiri oleh santri/wali pasca-pendaftaran melalui dashboard?
 - Berapa lama masa retensi berkas dan riwayat data kesehatan pendaftar yang tidak diterima?
 - Apakah pencantuman jenjang pendidikan institusi pada template cetak dokumen perlu dikonfigurasi melalui backoffice tersendiri atau cukup satu konfigurasi statis institusi?

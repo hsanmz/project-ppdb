@@ -41,6 +41,7 @@ export default function ApplicantProfileModal({
 }: ApplicantProfileModalProps) {
   const { toast } = useToast()
   const documentContainerRef = useRef<HTMLDivElement | null>(null)
+  const exportContainerRef = useRef<HTMLDivElement | null>(null)
 
   const [activePage, setActivePage] = useState<1 | 2 | 'both'>('both')
   const [isDownloading, setIsDownloading] = useState<'pdf' | 'image' | null>(null)
@@ -66,14 +67,15 @@ export default function ApplicantProfileModal({
     (resolvedApplicant.id ? resolvedApplicant.id.slice(0, 8).toUpperCase() : 'REG')
 
   const handleDownload = async (format: 'pdf' | 'image') => {
-    if (!documentContainerRef.current) {
+    const el = exportContainerRef.current || documentContainerRef.current
+    if (!el) {
       toast('error', 'Dokumen formulir belum siap diunduh. Mohon tunggu sebentar.')
       return
     }
     try {
       setIsDownloading(format)
       await downloadApplicantFormDoc({
-        containerElement: documentContainerRef.current,
+        containerElement: el,
         format,
         applicantName: fullName,
         registrationNo: regNo,
@@ -255,6 +257,23 @@ export default function ApplicantProfileModal({
           <ApplicantFormDocument applicant={resolvedApplicant} page={activePage} />
         </div>
       </DialogContent>
+
+      {/* Kontainer Render Isolasi Formulir A4 2 Halaman (Presisi Ekspor Bersih) */}
+      <div
+        ref={exportContainerRef}
+        className="print:hidden"
+        style={{
+          position: 'fixed',
+          left: '-99999px',
+          top: 0,
+          width: '210mm',
+          zIndex: -99999,
+          pointerEvents: 'none',
+        }}
+        aria-hidden="true"
+      >
+        <ApplicantFormDocument applicant={resolvedApplicant} page="both" />
+      </div>
     </Dialog>
   )
 }

@@ -99,7 +99,9 @@ def resolve_app_label(app: str | None, user_type: str | None) -> str:
     """
     key = (app or "").strip().lower()
     if key == "ppdb":
-        return "PPDB Pendaftar" if (user_type or "") == "applicant" else "PPDB Backoffice"
+        return (
+            "PPDB Pendaftar" if (user_type or "") == "applicant" else "PPDB Backoffice"
+        )
     if key in APP_LABELS:
         return APP_LABELS[key]
     # Sesi lama (sebelum kolom `app` ada) → fallback berdasarkan tipe user.

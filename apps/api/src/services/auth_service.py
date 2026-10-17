@@ -190,9 +190,7 @@ class AuthService:
             "user_type": user.user_type or "admin",
             "is_superadmin": is_superadmin or user.user_type == "superadmin",
             "is_active": user.is_active,
-            "created_at": (
-                user.created_at.isoformat() if user.created_at else None
-            ),
+            "created_at": (user.created_at.isoformat() if user.created_at else None),
             "last_login_at": (
                 user.last_login_at.isoformat() if user.last_login_at else None
             ),
@@ -418,7 +416,10 @@ class AuthService:
             logger.debug("Could not update session last_seen_at", exc_info=True)
 
     def cleanup_expired_sessions(self, user_id: str | None = None) -> int:
-        """Hapus sesi yang sudah kedaluwarsa atau dicabut dari database agar tidak menumpuk."""
+        """Hapus sesi kedaluwarsa atau yang sudah dicabut dari database.
+
+        Tujuannya agar tabel sesi tidak menumpuk.
+        """
         try:
             now = datetime.now(WIB)
             q = self.repository.db.query(RefreshToken).filter(
@@ -426,7 +427,7 @@ class AuthService:
             )
             if user_id:
                 q = q.filter(RefreshToken.user_id == user_id)
-            deleted = q.delete(synchronize_session=False)
+            deleted = int(q.delete(synchronize_session=False))
             self.repository.db.commit()
             return deleted
         except Exception:
@@ -441,7 +442,8 @@ class AuthService:
         current_session_id = user_dict.get("session_id")
         now = datetime.now(WIB)
 
-        # Bersihkan sesi kedaluwarsa atau yang sudah dicabut agar tidak menumpuk di database
+        # Bersihkan sesi kedaluwarsa atau yang sudah dicabut agar tidak
+        # menumpuk di database
         self.cleanup_expired_sessions(user_id)
 
         rows = (
@@ -492,9 +494,7 @@ class AuthService:
         try:
             (
                 self.repository.db.query(RefreshToken)
-                .filter(
-                    RefreshToken.id == session_id, RefreshToken.user_id == user_id
-                )
+                .filter(RefreshToken.id == session_id, RefreshToken.user_id == user_id)
                 .delete(synchronize_session=False)
             )
             self.repository.db.commit()
@@ -546,6 +546,15 @@ class AuthService:
             if not verify_password(data["old_password"], user.password_hash):
                 raise HTTPException(status_code=400, detail="Old password is incorrect")
             user.password_hash = hash_password(new_password)
+
+        if user.user_type == "applicant":
+            applicant = self.repository.get_applicant_by_user_id(user.id)
+            if applicant:
+                if "phone" in data and data["phone"]:
+                    applicant.phone = data["phone"]
+                if data.get("full_name"):
+                    applicant.full_name = data["full_name"]
+                applicant.updated_at = datetime.now(WIB)
 
         self.repository.update_user(user)
         # Invalidate Redis cache after profile update

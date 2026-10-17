@@ -484,10 +484,11 @@ export function ProfilePage({
 
         {/* ── CONTAINER 1: Profil / Avatar + Ringkasan Data Akun ── */}
         <Card className="shadow-sm border-border bg-card">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 lg:gap-6">
-              {/* Sisi Kiri Container 1: Avatar + Ganti Foto / URL (Clean & Compact) */}
-              <div className="flex flex-col items-center text-center shrink-0 w-full sm:w-36 lg:w-40">
+          <CardContent className="p-4 sm:p-5 space-y-4">
+            {/* Bagian Atas: Kiri Avatar, Kanan Identitas User */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4 sm:gap-6">
+              {/* Kiri: Avatar + Tombol Upload & URL */}
+              <div className="shrink-0 flex justify-center sm:justify-start">
                 <AvatarEditor
                   value={form.avatar_url}
                   initials={initials}
@@ -499,22 +500,21 @@ export function ProfilePage({
                 />
               </div>
 
-              {/* Divider: Vertikal di desktop/tablet, horizontal di mobile */}
-              <div className="hidden sm:block w-px self-stretch bg-border/60 shrink-0" />
-              <div className="block sm:hidden w-full h-px bg-border/60" />
-
-              {/* Sisi Kanan Container 1: Sebelahnya baru data-data profile */}
-              <div className="flex-1 min-w-0 w-full">
-                {/* Header Identitas Pengguna */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-3 border-b border-border/60">
-                  <div className="min-w-0">
-                    <h2 className="font-heading text-sm sm:text-base font-bold text-foreground tracking-tight truncate">
-                      {user?.full_name || form.full_name || user?.username || form.username || '—'}
-                    </h2>
-                    <p className="text-[11px] text-muted-foreground font-mono truncate">
-                      @{user?.username || form.username || '—'}
-                    </p>
-                  </div>
+              {/* Kanan: Identitas User (Rata Tengah) */}
+              <div className="min-w-0 flex-1 text-center flex flex-col items-center justify-center space-y-1">
+                <h2 className="font-heading text-base sm:text-lg font-bold text-foreground tracking-tight truncate max-w-full">
+                  {user?.full_name || form.full_name || user?.username || form.username || '—'}
+                </h2>
+                <p className="text-xs text-muted-foreground font-mono truncate max-w-full">
+                  @{user?.username || form.username || '—'}
+                </p>
+                {(user?.email || form.email) && (
+                  <p className="text-xs text-muted-foreground truncate max-w-full flex items-center justify-center gap-1.5" title={user?.email || form.email || undefined}>
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                    <span>{user?.email || form.email}</span>
+                  </p>
+                )}
+                <div className="pt-1 flex items-center justify-center">
                   <Badge
                     variant={isSuper ? 'default' : 'secondary'}
                     className={cn(
@@ -526,83 +526,89 @@ export function ProfilePage({
                     {roleLabel}
                   </Badge>
                 </div>
+              </div>
+            </div>
 
-                {/* 6 Ringkasan Data Akun */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
-                  {/* 1. Username */}
-                  <div className="flex items-start gap-2 min-w-0">
-                    <AtSign className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Username</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">
-                        {user?.username || form.username || '—'}
-                      </p>
-                    </div>
-                  </div>
+            {/* Divider Pemisah Atas & Bawah */}
+            <div className="border-t border-border/70" />
 
-                  {/* 2. Status Akun */}
-                  <div className="flex items-start gap-2 min-w-0">
-                    <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Status Akun</p>
-                      <div className="mt-0.5">
-                        {user?.is_active === false ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-                            <XCircle className="h-3 w-3" /> Nonaktif
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
-                            <CheckCircle2 className="h-3 w-3" /> Aktif
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. Email (Col-span-2 agar alamat panjang tidak terpotong) */}
-                  <div className="sm:col-span-2 flex items-start gap-2 min-w-0">
-                    <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Email</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">
-                        {user?.email || form.email || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 4. No. WhatsApp */}
-                  <div className="flex items-start gap-2 min-w-0">
-                    <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">No. WhatsApp</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">
-                        {user?.phone || form.phone || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 5. Terdaftar Sejak */}
-                  <div className="flex items-start gap-2 min-w-0">
-                    <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Terdaftar Sejak</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">
-                        {formatSessionDateTime(user?.created_at ? user.created_at.replace(' ', 'T') : undefined)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 6. Terakhir Login */}
-                  <div className="sm:col-span-2 flex items-start gap-2 min-w-0">
-                    <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Terakhir Login</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">
-                        {formatSessionDateTime(user?.last_login_at ? user.last_login_at.replace(' ', 'T') : undefined)}
-                      </p>
-                    </div>
-                  </div>
+            {/* Bagian Bawah: Ringkasan 6 Data Akun (Presisi Tengah & 3 Kolom Simetris) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 pt-0.5">
+              {/* 1. Username */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <AtSign className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Username</span>
                 </div>
+                <p className="text-xs font-semibold text-foreground mt-1 truncate max-w-full text-center">
+                  {user?.username || form.username || '—'}
+                </p>
+              </div>
+
+              {/* 2. Status Akun */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <BadgeCheck className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Status Akun</span>
+                </div>
+                <div className="mt-1 flex items-center justify-center">
+                  {user?.is_active === false ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                      <XCircle className="h-3 w-3 shrink-0" /> Nonaktif
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" /> Aktif
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Email */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <Mail className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Email</span>
+                </div>
+                <p
+                  className="text-xs font-semibold text-foreground mt-1 truncate max-w-full text-center"
+                  title={user?.email || form.email || undefined}
+                >
+                  {user?.email || form.email || '—'}
+                </p>
+              </div>
+
+              {/* 4. No. WhatsApp */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">No. WhatsApp</span>
+                </div>
+                <p className="text-xs font-semibold text-foreground mt-1 truncate max-w-full text-center">
+                  {user?.phone || form.phone || '—'}
+                </p>
+              </div>
+
+              {/* 5. Terdaftar Sejak */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Terdaftar Sejak</span>
+                </div>
+                <p className="text-xs font-semibold text-foreground mt-1 truncate max-w-full text-center">
+                  {formatSessionDateTime(user?.created_at ? user.created_at.replace(' ', 'T') : undefined)}
+                </p>
+              </div>
+
+              {/* 6. Terakhir Login */}
+              <div className="flex flex-col items-center justify-center text-center p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/50 min-w-0">
+                <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Terakhir Login</span>
+                </div>
+                <p className="text-xs font-semibold text-foreground mt-1 truncate max-w-full text-center">
+                  {formatSessionDateTime(user?.last_login_at ? user.last_login_at.replace(' ', 'T') : undefined)}
+                </p>
               </div>
             </div>
           </CardContent>

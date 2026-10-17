@@ -87,8 +87,8 @@ export async function downloadLoaDoc({
     pageElements = [containerElement]
   }
 
-  // Jika format gambar dan pengguna sedang melihat halaman tertentu (1 atau 2), ekspor hanya halaman tersebut
-  if (format === 'image' && pageMode && pageMode !== 'both') {
+  // Jika pengguna memilih halaman tertentu (Hal 1 atau Hal 2), ekspor hanya halaman tersebut
+  if (pageMode && pageMode !== 'both') {
     const filtered = pageElements.filter((el) => {
       const pageNumAttr = el.getAttribute('data-page')
       return pageNumAttr === String(pageMode)

@@ -88,6 +88,8 @@ export default function AdminReceiptPage() {
     }
   }
 
+  const exportCardRef = useRef<HTMLDivElement>(null)
+
   const handleWhatsApp = () => {
     if (!shareUrl || !receipt) return
     const text = encodeURIComponent(
@@ -103,10 +105,11 @@ export default function AdminReceiptPage() {
   }
 
   const handleDownloadPdf = async () => {
-    if (!cardRef.current || !receipt) return
+    const el = exportCardRef.current || cardRef.current
+    if (!el || !receipt) return
     try {
       setIsDownloading('pdf')
-      await downloadReceiptPdf(cardRef.current, receipt.applicant_name, receipt.receipt_no)
+      await downloadReceiptPdf(el, receipt.applicant_name, receipt.receipt_no)
       toast('success', 'Kuitansi resmi PDF (A4) berhasil diunduh.')
     } catch (err: any) {
       toast('error', err?.message || 'Gagal mengunduh kuitansi PDF')
@@ -116,10 +119,11 @@ export default function AdminReceiptPage() {
   }
 
   const handleDownloadImage = async () => {
-    if (!cardRef.current || !receipt) return
+    const el = exportCardRef.current || cardRef.current
+    if (!el || !receipt) return
     try {
       setIsDownloading('image')
-      await downloadReceiptImage(cardRef.current, receipt.applicant_name, receipt.receipt_no)
+      await downloadReceiptImage(el, receipt.applicant_name, receipt.receipt_no)
       toast('success', 'Gambar kuitansi (PNG) berhasil diunduh.')
     } catch (err: any) {
       toast('error', err?.message || 'Gagal mengunduh gambar kuitansi')
@@ -247,11 +251,30 @@ export default function AdminReceiptPage() {
       )}
 
       {receipt && (
-        <div className="w-full max-w-2xl mx-auto">
-          <div ref={cardRef}>
+        <>
+          <div className="w-full max-w-2xl mx-auto">
+            <div ref={cardRef}>
+              <OfficialReceiptCard receipt={receipt} />
+            </div>
+          </div>
+
+          {/* Kontainer Render Isolasi Desktop Kuitansi Resmi (Presisi Tanpa Terpengaruh Layar Ponsel) */}
+          <div
+            ref={exportCardRef}
+            className="print:hidden"
+            style={{
+              position: 'fixed',
+              left: '-99999px',
+              top: 0,
+              width: '672px',
+              zIndex: -99999,
+              pointerEvents: 'none',
+            }}
+            aria-hidden="true"
+          >
             <OfficialReceiptCard receipt={receipt} />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

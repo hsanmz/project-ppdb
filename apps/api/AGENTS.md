@@ -30,9 +30,10 @@ apps/api/src/
 │   ├── rate_limit.py           # In-memory / Redis rate limiting
 │   ├── scheduler.py            # Background scheduler (pengingat cicilan, expired wave)
 │   ├── security.py             # Password hashing (bcrypt) & JWT token encoding/cookies
+│   ├── session_meta.py         # Ekstraksi metadata sesi (browser, OS, device, IP)
 │   └── uploads.py              # File upload handling (local disk & Cloudinary)
 ├── models/                     # Definisi SQLAlchemy ORM Models
-│   ├── auth.py                 # User, Role, UserModulePermission, UserPagePermission
+│   ├── auth.py                 # User, Role, UserSession, UserModulePermission, UserPagePermission
 │   ├── ppdb.py                 # PPDBPeriod, PPDBWave, PPDBApplicant, PPDBPaymentTransaction, PPDBTIUAttempt, PPDBStage2Bill
 │   ├── selection.py            # SelectionCategory, SelectionCriteria, SelectionSession, SelectionScore
 │   ├── content.py              # SiteSetting, News, Programs, Facilities, dll.
@@ -49,8 +50,9 @@ apps/api/src/
 │   ├── auth_service.py
 │   └── user_service.py
 └── modules/                    # API Routers & Pydantic Schemas
-    ├── auth/                   # POST /companyprofile/auth/login, /me, /refresh, /logout
-    ├── ppdb/                   # CRUD gelombang, periode, pendaftaran, dokumen, LoA, SKD, arsip dossier
+    ├── auth/                   # POST /companyprofile/auth/login, /me, /refresh, /logout, /sessions
+    ├── search/                 # GET /search/global (pencarian modular terpadu lintas entitas)
+    ├── ppdb/                   # CRUD gelombang, periode, pendaftaran, dokumen, LoA, SKD, arsip dossier, profil mandiri
     ├── payment/                # Pakasir v2 QRIS, webhook, tagihan cicilan tahap 2, kuitansi resmi
     ├── selection/              # SEB TIU attempt, sesi 1:1 Tahfidz & Wawancara, penilaian evaluator
     ├── superadmin/             # Stats dashboard, audit trail, user & role management
@@ -72,6 +74,21 @@ apps/api/src/
      - `require_module_access(module, access_level)`: Memastikan izin modul (`none` < `dashboard` < `read` < `crud`).
      - `require_ppdb_admin`: Memastikan akses manajemen PPDB level CRUD.
      - `require_ppdb_read`: Memastikan akses pembacaan data PPDB level READ.
+3. **Manajemen Sesi Perangkat & Revokasi:**
+   - Metadata sesi (perangkat, browser, OS, alamat IP) diekstrak otomatis melalui `src/core/session_meta.py`.
+   - Sesi dicatat dalam tabel `user_sessions`. Endpoint manajemen sesi:
+     - `GET /companyprofile/auth/sessions`: Menampilkan seluruh sesi aktif akun.
+     - `DELETE /companyprofile/auth/sessions/{id}`: Mencabut sesi login perangkat tertentu.
+     - `POST /companyprofile/auth/sessions/revoke-others`: Mencabut seluruh sesi perangkat lain kecuali yang sedang aktif.
+
+---
+
+## 🔍 Modul Pencarian Global (`src/modules/search/`)
+
+- **Endpoint Terpadu (`GET /search/global`):**
+  - Menerima parameter `q` (query teks), `limit`, dan `category`.
+  - Melakukan pencarian terindeks lintas entitas: calon santri (`applicants`), artikel berita (`news`), program pendidikan (`programs`), fasilitas, staf, akun pengguna (`users`), dan log aktivitas (`audit_logs`).
+  - Hasil difilter sesuai dengan hak akses (RBAC) pengguna yang sedang login.
 
 ---
 
@@ -102,8 +119,11 @@ apps/api/src/
 
 ---
 
-## 📜 LoA, SKD, dan Arsip Dossier
+## 📜 LoA, SKD, Profil Mandiri & Arsip Dossier
 
+- **Profil Mandiri Pendaftar (`GET /ppdb/applicants/me` & `PUT /ppdb/applicants/me`):**
+  - Mengambil data formulir lengkap serta mengizinkan pembaruan mandiri data pendaftar (biodata santri, kontak, data orang tua/wali, kuesioner kesehatan).
+  - Pembatasan: pembaruan dinonaktifkan (`is_locked`) jika pendaftar sudah dinyatakan lulus dan LoA resmi diterbitkan atau jika dikunci manual oleh panitia.
 - **Letter of Acceptance (LoA):**
   - Admin menerbitkan LoA untuk pendaftar yang lulus (`/ppdb/pengumuman`).
   - Pendaftar dapat menandatangani LoA digital bersama orang tua (`POST /ppdb/applicants/me/sign-loa`).

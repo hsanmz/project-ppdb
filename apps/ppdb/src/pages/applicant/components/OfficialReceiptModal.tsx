@@ -22,15 +22,17 @@ interface OfficialReceiptModalProps {
 export default function OfficialReceiptModal({ open, onOpenChange, receipt }: OfficialReceiptModalProps) {
   const { toast } = useToast()
   const cardRef = useRef<HTMLDivElement>(null)
+  const exportCardRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState<'pdf' | 'image' | null>(null)
 
   if (!receipt) return null
 
   const handleDownloadPdf = async () => {
-    if (!cardRef.current) return
+    const el = exportCardRef.current || cardRef.current
+    if (!el) return
     try {
       setIsDownloading('pdf')
-      await downloadReceiptPdf(cardRef.current, receipt.applicant_name, receipt.receipt_no)
+      await downloadReceiptPdf(el, receipt.applicant_name, receipt.receipt_no)
       toast('success', 'Kuitansi resmi PDF (A4) berhasil diunduh.')
     } catch (err: any) {
       toast('error', err?.message || 'Gagal mengunduh kuitansi PDF')
@@ -40,10 +42,11 @@ export default function OfficialReceiptModal({ open, onOpenChange, receipt }: Of
   }
 
   const handleDownloadImage = async () => {
-    if (!cardRef.current) return
+    const el = exportCardRef.current || cardRef.current
+    if (!el) return
     try {
       setIsDownloading('image')
-      await downloadReceiptImage(cardRef.current, receipt.applicant_name, receipt.receipt_no)
+      await downloadReceiptImage(el, receipt.applicant_name, receipt.receipt_no)
       toast('success', 'Gambar kuitansi (PNG) berhasil diunduh.')
     } catch (err: any) {
       toast('error', err?.message || 'Gagal mengunduh gambar kuitansi')
@@ -139,6 +142,25 @@ export default function OfficialReceiptModal({ open, onOpenChange, receipt }: Of
           </div>
         </div>
       </DialogContent>
+
+      {/* Kontainer Render Isolasi Desktop Kuitansi Resmi (Presisi Tanpa Terpengaruh Layar Ponsel) */}
+      {receipt && (
+        <div
+          ref={exportCardRef}
+          className="print:hidden"
+          style={{
+            position: 'fixed',
+            left: '-99999px',
+            top: 0,
+            width: '672px',
+            zIndex: -99999,
+            pointerEvents: 'none',
+          }}
+          aria-hidden="true"
+        >
+          <OfficialReceiptCard receipt={receipt} />
+        </div>
+      )}
     </Dialog>
   )
 }

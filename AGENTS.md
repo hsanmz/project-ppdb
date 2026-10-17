@@ -24,8 +24,9 @@ Pendaftar melewati tahapan pendaftaran secara berurutan dan terstruktur:
 5. **Booking Sesi 1:1 Tahfidz:** Pendaftar memilih slot jadwal ujian Tahfidz bersama penguji.
 6. **Booking Sesi 1:1 Wawancara:** Terbuka otomatis setelah nilai Tahfidz diinput oleh penguji.
 7. **Pengumuman Kelulusan & LoA:** Pendaftar yang dinyatakan lulus dapat mengunduh LoA resmi dan membubuhkan tanda tangan digital bersama orang tua/wali (`POST /ppdb/applicants/me/sign-loa`).
-8. **Pembayaran Tahap 2 (DP) & Cicilan:** Pendaftar membayar DP biaya masuk via Pakasir v2 QRIS, lalu mengatur skema pembagian cicilan untuk sisa tagihan.
+8. **Pembayaran Tahap 2 (DP) & Cicilan:** Pendaftar membayar DP biaya masuk via Pakasir v2 QRIS, lalu mengatur skema pembagian cicilan untuk sisa tagihan. Panitia dapat memantau rincian tagihan per individu di `/admin/pembayaran-tahap2/:applicantId`.
 9. **Surat Keterangan Diterima (SKD) & Grup WA:** Setelah DP Tahap 2 lunas, pendaftar mendapatkan SKD resmi dengan nomor registrasi unik serta tautan bergabung ke WhatsApp Group resmi santri baru.
+10. **Profil Mandiri & Keamanan Sesi:** Calon santri dapat meninjau dan memperbarui data formulir serta kuesioner kesehatan mandiri di `/applicant/profile` (`PUT /ppdb/applicants/me`) selama masa seleksi belum dikunci (sebelum LoA resmi terbit), mengelola foto avatar, dan memantau sesi perangkat aktif.
 
 ---
 
@@ -68,6 +69,33 @@ Pendaftar melewati tahapan pendaftaran secara berurutan dan terstruktur:
 - Struktur 10 pertanyaan baku (riwayat penyakit kronis, diagnosis kondisi tertentu, alergi, pengobatan rutin, keterbatasan fisik, riwayat rawat inap 2 tahun terakhir, kebutuhan khusus belajar, nama kontak darurat, hubungan kontak darurat, nomor telepon darurat, dan pernyataan persetujuan).
 - Pertanyaan Ya/Tidak membuka kolom keterangan kondisional. Keterangan pada jawaban "Tidak" dikosongkan dan tidak dikirim.
 - Validasi kelengkapan dijalankan ulang di backend saat pendaftaran. Data kesehatan bersifat sensitif: hanya dapat dibuka oleh admin pada detail/dossier pendaftar dengan catatan audit.
+- Calon santri dapat memperbarui kuesioner kesehatan secara mandiri di `/applicant/profile` selama seleksi belum selesai dan status pendaftar belum berstatus dikunci (`is_locked`).
+
+---
+
+## Standardisasi Dokumen Resmi & Ekspor Cetak
+
+Sistem menerapkan format cetak dan ekspor resmi A4 baku (`apps/ppdb/src/utils/export*`):
+- **Formulir Pendaftaran:** Rekap data diri, riwayat sekolah, keluarga, dan identifikasi kesehatan berstempel digital (`exportApplicantForm`).
+- **Lembar Penilaian Evaluator:** Rekap skor kuis TIU otomatis, ujian Tahfidz, dan wawancara berbobot resmi (`exportAssessment`).
+- **Kuitansi Resmi Pembayaran:** Terintegrasi stempel digital dan verifikasi QR HMAC token (`exportReceipt`).
+- **Surat Penerimaan (LoA):** Memuat klausul *non-refundable*, stempel digital, tanda tangan basah/digital orang tua & panitia, serta QR verifikasi (`exportLoa`).
+- **Surat Keterangan Diterima (SKD):** Diterbitkan dengan nomor registrasi unik `REG-{YYYYMMDD}-{XXXX}` pasca-pelunasan DP (`exportSkd`).
+
+---
+
+## Pencarian Terpadu & Semantic Search
+
+- **Core API (`GET /search/global`):** Endpoint pencarian modular berkecepatan tinggi lintas modul: pendaftar, berita, program, staf, pengguna sistem, dan log aktivitas.
+- **Superadmin Semantic Engine (`Ctrl+K`):** Dialog pencarian semantik cerdas bertenaga pemrosesan kata kunci natural untuk navigasi cepat halaman, pencarian data pendaftar, dan eksekusi tindakan instan.
+
+---
+
+## Manajemen Sesi Multi-Perangkat Terpadu
+
+- Terpasang pada seluruh profil pengguna (Pendaftar, Admin PPDB, Admin Web, dan Superadmin) melalui paket antarmuka bersama `@repo/ui/profile`.
+- Melacak sesi login aktif (perangkat, browser, OS, alamat IP, waktu interaksi terakhir).
+- Menyediakan fungsi pemutusan sesi jarak jauh (*remote session revoke*) dan pencabutan seluruh sesi lain (*revoke other sessions*) saat terjadi aktivitas mencurigakan.
 
 ---
 
@@ -81,9 +109,11 @@ Pendaftar melewati tahapan pendaftaran secara berurutan dan terstruktur:
 
 - `docs/REQUIREMENTS.md` — Spesifikasi aturan bisnis dan logika utama.
 - `docs/DOCKER_SETUP.md` — Runbook deployment lokal WSL2 & Docker yang wajib diikuti langkah per langkah.
+- `docs/HERO_3D_GLOBE.md` — Catatan teknis arsitektur 3D Hero Globe Three.js dan optimasi bundle.
 - `docs/INTEGRASI_TIU_APPS_SCRIPT.md` — Panduan pemasangan Apps Script Google Form TIU.
 - `docs/PANDUAN_UJIAN_TIU_SEB.md` — Panduan instalasi dan penggunaan Safe Exam Browser pendaftar.
 - `docs/notifikasi-code-1790904241894.md` — Spesifikasi template dan event notifikasi WhatsApp.
+- `scripts/README.md` — Dokumentasi skrip operasional, sinkronisasi Windows-WSL, dan tooling debug.
 - `apps/api/AGENTS.md` — Panduan arsitektur backend Core API (FastAPI, Alembic, Pakasir v2, Repositories).
 - `apps/ppdb/AGENTS.md` — Panduan arsitektur frontend PPDB (8 rute tahapan pendaftar, modal, dan backoffice).
 - `apps/superadmin/AGENTS.md` — Panduan arsitektur panel Superadmin.

@@ -194,7 +194,7 @@ export function exportAllApplicantsToWord(
       const wave = a.wave_name || '-'
       const wa = a.phone || '-'
       const email = a.email || '-'
-      
+
       const domisiliParts = [a.address, a.district, a.city, a.province].filter(Boolean)
       const domisili = domisiliParts.length > 0 ? domisiliParts.join(', ') : '-'
 
@@ -408,7 +408,7 @@ export function exportAllApplicantsToWord(
         <!-- Tabel Data Lengkap -->
         <table class="data-table" border="1" cellspacing="0" cellpadding="0">
           <thead>
-            <tr>
+            <tr style="mso-yfti-tblheader: yes;">
               <th width="3%" style="text-align: center;">No</th>
               <th width="8%">No. Registrasi</th>
               <th width="12%">Nama Calon Santri</th>
@@ -633,12 +633,17 @@ export function exportAllApplicantsToPdf(
           width: 100%;
           border-collapse: collapse;
           font-size: 7.5pt;
+          page-break-inside: auto;
         }
         thead {
           display: table-header-group;
         }
+        tfoot {
+          display: table-footer-group;
+        }
         tr {
           page-break-inside: avoid;
+          break-inside: avoid;
         }
         th {
           background-color: #065f46;
@@ -652,6 +657,8 @@ export function exportAllApplicantsToPdf(
           padding: 4px 4px;
           border: 1px solid #cbd5e1;
           vertical-align: top;
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
         tr:nth-child(even) td {
           background-color: #f8fafc;
