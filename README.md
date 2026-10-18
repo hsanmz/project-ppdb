@@ -40,7 +40,8 @@ Untuk memudahkan verifikasi keabsahan dokumen pendaftar secara langsung via pemi
 ## 📚 Dokumen Spesifikasi, Panduan & Panduan Agen
 
 - 📑 [**Aturan Bisnis & Requirement (docs/REQUIREMENTS.md)**](docs/REQUIREMENTS.md) — Aturan bisnis periode, kuota atomik, LoA, rubrik penilaian, bebas-jenjang, dan kuesioner kesehatan.
-- 🐳 [**Setup Docker Runbook (docs/DOCKER_SETUP.md)**](docs/DOCKER_SETUP.md) — Panduan wajib deployment lokal menggunakan WSL2 dan Docker Engine.
+- 🐳 [**Setup Docker Runbook (WSL2, lokal) — docs/DOCKER_SETUP.md**](docs/DOCKER_SETUP.md) — Panduan deployment lokal menggunakan WSL2 dan Docker Engine.
+- 🚀 [**Docker Production Runbook (VPS) — docs/DOCKER_PRODUCTION.md**](docs/DOCKER_PRODUCTION.md) — Setup production di VPS Linux dengan nginx + Let's Encrypt.
 - 🤖 [**Panduan Utama AI Agents (AGENTS.md)**](AGENTS.md) — Tata cara kerja dan aturan coding lintas project.
   - ⚙️ [Panduan Core API Backend](apps/api/AGENTS.md)
   - 🎓 [Panduan Frontend PPDB](apps/ppdb/AGENTS.md)

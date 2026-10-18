@@ -38,6 +38,17 @@ export interface DocSection {
   content: React.ReactNode
 }
 
+const getApiWebhookUrl = () => {
+  if (typeof window === 'undefined') return 'https://api.ptdarrahman.sch.id/ppdb/webhook/tiu'
+  const { protocol, hostname } = window.location
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8000/ppdb/webhook/tiu`
+  }
+  const rootHost = hostname.replace(/^(?:ppdb|admin|superadmin)\./i, '')
+  return `${protocol}//api.${rootHost}/ppdb/webhook/tiu`
+}
+
+
 export interface DocItem {
   title: string
   subtitle: string
@@ -586,7 +597,7 @@ export const SYSTEM_DOCS: Record<string, DocItem> = {
               <strong className="text-slate-900 block mb-1">Langkah 1: Uji Backend (cURL)</strong>
               <p className="mb-1 leading-relaxed">Unduh <code>.seb</code> (fresh), ambil <code>token</code> dari <code>startURL</code>, lalu kirim:</p>
               <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[10px] overflow-x-auto whitespace-pre-wrap break-all">
-{`curl -X POST "https://api.ptdarrahman.sch.id/ppdb/webhook/tiu" \\
+{`curl -X POST "${getApiWebhookUrl()}" \\
   -H "Content-Type: application/json" \\
   -H "X-TIU-Secret: WEBHOOK_SECRET" \\
   -d '{"token":"TOKEN","score":80}'`}

@@ -24,6 +24,8 @@ import {
 import PageHeaderCard from '@/components/shared/PageHeaderCard'
 import LoaOfficialDocument, { type LoaData } from '@/components/shared/LoaOfficialDocument'
 
+const activeOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://ptdarrahman.sch.id'
+
 export default function LoaSkdPage() {
   const [activeTab, setActiveTab] = useState<'loa' | 'skd'>('loa')
   const [loaActivePage, setLoaActivePage] = useState<1 | 2>(1)
@@ -450,7 +452,7 @@ export function LoaDocumentView({
               <p className="text-[9px] text-slate-400 italic mb-1.5">Dua Pihak — Sah Secara Hukum Digital</p>
               <div className="flex justify-center items-center gap-2 py-1">
                 <div className="p-1 bg-white border border-slate-200 rounded shadow-2xs">
-                  <QRCodeSVG value={`https://ptdarrahman.sch.id/loa/${data.registrationNo}?verify=parent`} size={44} level="M" />
+                  <QRCodeSVG value={`${activeOrigin}/loa/${data.registrationNo}?verify=parent`} size={44} level="M" />
                 </div>
                 <div className="text-left">
                   <span className="text-[9px] font-mono text-emerald-700 block font-semibold">TERKONFIRMASI</span>
@@ -467,7 +469,7 @@ export function LoaDocumentView({
               <p className="text-xs font-bold text-slate-900">Office of Admission PPDB PTDARRAHMAN</p>
               <div className="flex justify-end items-center gap-2 py-1">
                 <div className="p-1 bg-white border border-slate-200 rounded shadow-2xs">
-                  <QRCodeSVG value={`https://ptdarrahman.sch.id/loa/${data.registrationNo}?verify=official`} size={44} level="M" />
+                  <QRCodeSVG value={`${activeOrigin}/loa/${data.registrationNo}?verify=official`} size={44} level="M" />
                 </div>
                 <div className="text-right">
                   <span className="text-[9px] font-mono text-emerald-700 block font-semibold">VERIFIED DIGITAL</span>

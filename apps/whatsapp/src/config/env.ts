@@ -5,7 +5,8 @@
  * Fails fast at startup if required variables are missing or invalid.
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import { z } from "zod";
 
 const envSchema = z.object({

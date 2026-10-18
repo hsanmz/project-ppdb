@@ -56,6 +56,10 @@ export default function TIUSettingsPage() {
   })
 
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://DOMAIN_ANDA'
+  const sampleApiUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol}//api.${window.location.hostname.replace(/^(?:ppdb|admin|superadmin)\./i, '')}`
+    : 'https://api.ptdarrahman.sch.id'
+
   const appsScriptCode = `function onSubmit(e) {
   var formResponses = e.response.getItemResponses();
   var token = "";
@@ -309,7 +313,7 @@ export default function TIUSettingsPage() {
                 Buka <strong className="text-slate-700">Ekstensi → Apps Script</strong> di Google Form. Tempel kode di bawah, lalu set <strong className="text-slate-700">Script Properties</strong> (<em>Project Settings → Script Properties</em>) dengan:
               </p>
               <ul className="list-disc list-inside text-[11px] text-slate-500 space-y-0.5 pl-1">
-                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">PPDB_API_BASE</code> = <strong>URL API publik</strong> (contoh: <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">https://api.ptdarrahman.sch.id</code>) — <span className="text-rose-600 font-medium">Jangan pakai localhost</span></li>
+                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">PPDB_API_BASE</code> = <strong>URL API publik</strong> (contoh: <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">{sampleApiUrl}</code>) — <span className="text-rose-600 font-medium">Jangan pakai localhost</span></li>
                 <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">TIU_WEBHOOK_SECRET</code> = sama persis dengan <strong>Webhook Secret</strong> di halaman ini</li>
               </ul>
               <p className="leading-relaxed text-[11px] text-slate-500">

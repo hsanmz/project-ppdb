@@ -385,7 +385,7 @@ export function exportAllApplicantsToWord(
               <div class="inst-subtitle">PANITIA PENERIMAAN PESERTA DIDIK BARU (PPDB)</div>
               <div class="inst-meta">
                 Rukan Hexa Green Kalimalang, Jl. Inspeksi Kalimalang C8-C9, Jatimulya, Tambun Selatan, Bekasi 17510<br/>
-                Website: www.ptdarrahman.sch.id &nbsp;|&nbsp; WhatsApp: 0815-1004-0999 &nbsp;|&nbsp; Email: info@ptdarrahman.sch.id
+                Website: ${typeof window !== 'undefined' ? window.location.host : 'www.ptdarrahman.sch.id'} &nbsp;|&nbsp; WhatsApp: 0815-1004-0999 &nbsp;|&nbsp; Email: info@ptdarrahman.sch.id
               </div>
             </td>
           </tr>

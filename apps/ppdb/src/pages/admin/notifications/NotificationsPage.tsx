@@ -104,6 +104,8 @@ const AVAILABLE_VARS = [
 
 const VAR_GROUPS = [...new Set(AVAILABLE_VARS.map(v => v.group))]
 
+const activeOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://ppdb.ptdarrahman.sch.id'
+
 const PREVIEW_CONTEXT: Record<string, string> = {
   '{nama_peserta}': 'Ahmad Fauzi',
   '{username}': 'ahmad.fauzi24',
@@ -111,10 +113,10 @@ const PREVIEW_CONTEXT: Record<string, string> = {
   '{phone}': '081234567890',
   '{password}': 'Pass1234',
   '{nama_sekolah}': "Pesantren Tahfidz Qur'an dan Digital Ar-Rahman",
-  '{link_login}': 'https://ppdb.ptdarrahman.sch.id/login',
-  '{link_aplikasi}': 'https://ppdb.ptdarrahman.sch.id/dashboard',
-  '{link_pembayaran}': 'https://ppdb.ptdarrahman.sch.id/payment',
-  '{link_panduan_seb}': 'https://ppdb.ptdarrahman.sch.id/panduan-seb',
+  '{link_login}': `${activeOrigin}/login`,
+  '{link_aplikasi}': `${activeOrigin}/dashboard`,
+  '{link_pembayaran}': `${activeOrigin}/payment`,
+  '{link_panduan_seb}': `${activeOrigin}/panduan-seb`,
   '{link_grup_whatsapp}': 'https://chat.whatsapp.com/contoh',
   '{nama_gelombang}': 'Gelombang 1 TA 2026/2027',
   '{tanggal_tutup}': '31 Oktober 2026',

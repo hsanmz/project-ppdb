@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next'
 import { getNews, getPrograms } from './lib/api'
 import type { NewsArticle, Program } from './lib/types'
 
-const baseUrl = 'https://ptdarrahman.sch.id'
+const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://ptdarrahman.sch.id').replace(/\/+$/, '')
 
 // Fallback tanggal statis yang konsisten (tidak berubah tiap build) saat item
 // dari API tidak punya kolom tanggal yang valid.

@@ -1,0 +1,72 @@
+# ============================================================
+# PTDARRAHMAN — PRODUCTION: Company Profile (Next.js)
+# ============================================================
+# Build context: repository ROOT (./)
+#
+# Container khusus website publik (Next.js App Router). Dipisah dari
+# container `nginx` karena Next butuh Node server (SSR/SSE), sedangkan
+# ppdb & superadmin cukup disajikan sebagai berkas statis.
+#
+# Env NEXT_PUBLIC_* di-inline saat build; tetap dikirim ulang saat runtime
+# lewat compose agar server-side render membaca nilai yang benar.
+# ============================================================
+
+ARG NODE_VERSION=22
+
+# ── Stage: builder ───────────────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-slim AS builder
+ENV PNPM_HOME="/pnpm"
+ENV PATH="${PNPM_HOME}:${PATH}"
+RUN corepack enable && corepack prepare pnpm@9.10.0 --activate
+
+WORKDIR /workspace
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm fetch --fetch-retries=8 --network-concurrency=4
+
+COPY package.json turbo.json ./
+
+COPY packages/ ./packages/
+COPY apps/companyprofile/ ./apps/companyprofile/
+COPY apps/ppdb/ ./apps/ppdb/
+COPY apps/superadmin/ ./apps/superadmin/
+
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --offline --frozen-lockfile --fetch-retries=8 --network-concurrency=4
+
+ARG NEXT_PUBLIC_API_URL=""
+ARG NEXT_PUBLIC_PORTAL_URL=""
+ARG NEXT_PUBLIC_FALLBACK_API_URL=""
+ARG NEXT_PUBLIC_MOCK_AUTH="false"
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_PORTAL_URL=${NEXT_PUBLIC_PORTAL_URL}
+ENV NEXT_PUBLIC_FALLBACK_API_URL=${NEXT_PUBLIC_FALLBACK_API_URL}
+ENV NEXT_PUBLIC_MOCK_AUTH=${NEXT_PUBLIC_MOCK_AUTH}
+
+RUN pnpm --filter companyprofile build
+
+# ── Stage: runtime ───────────────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-slim AS runtime
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+WORKDIR /workspace
+
+# Root node_modules + seluruh workspace dibutuhkan karena `@repo/ui` adalah
+# dependency workspace dan `next start` dijalankan dari folder app.
+COPY --from=builder /workspace/node_modules ./node_modules
+COPY --from=builder /workspace/pnpm-workspace.yaml /workspace/pnpm-lock.yaml /workspace/package.json /workspace/turbo.json ./
+COPY --from=builder /workspace/packages ./packages
+COPY --from=builder /workspace/apps/companyprofile ./apps/companyprofile
+
+# Catatan: proses berjalan sebagai root DI DALAM container (default).
+# Harden via nginx + network isolation (container tidak publish port ke host)
+# dan jangan bind-mount apa pun yang bisa ditulis dari luar. `next start`
+# perlu menulis ke .next/cache (image optimization/ISR), jadi user non-root
+# tanpa izin tulis folder itu akan gagal.
+EXPOSE 3000
+
+WORKDIR /workspace/apps/companyprofile
+CMD ["node", "node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]

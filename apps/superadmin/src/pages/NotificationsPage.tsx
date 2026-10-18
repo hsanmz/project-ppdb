@@ -77,16 +77,26 @@ const AVAILABLE_VARS = [
   { key: '{deadline_daftar_ulang}', desc: 'Deadline daftar ulang' },
 ]
 
+const getPpdbPreviewOrigin = () => {
+  if (typeof window === 'undefined') return 'https://ppdb.ptdarrahman.sch.id'
+  const { protocol, hostname } = window.location
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:5174`
+  }
+  const rootHost = hostname.replace(/^(?:superadmin|admin)\./i, '')
+  return `${protocol}//ppdb.${rootHost}`
+}
+
 const PREVIEW_CONTEXT: Record<string, string> = {
   '{nama_peserta}': 'Ahmad Fauzi',
   '{username}': 'ahmad.fauzi24',
   '{email}': 'ahmad@example.com',
   '{phone}': '081234567890',
   '{password}': 'Pass1234',
-  '{link_login}': 'https://ppdb.ptdarrahman.sch.id/auth/login',
+  '{link_login}': `${getPpdbPreviewOrigin()}/auth/login`,
   '{batas_waktu_bayar}': '2026-09-25 23:59',
   '{nominal_bayar}': 'Rp 350.000',
-  '{link_pembayaran}': 'https://ppdb.ptdarrahman.sch.id/checkout',
+  '{link_pembayaran}': `${getPpdbPreviewOrigin()}/checkout`,
   '{alasan_penolakan}': 'Foto tidak jelas / buram',
   '{alasan_gagal}': 'Saldo tidak mencukupi',
   '{tanggal_seleksi}': 'Sabtu, 10 Oktober 2026',

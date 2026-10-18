@@ -11,6 +11,8 @@ import { useScrollReveal } from '@/app/hooks/useScrollAnimations'
 import type { Staff } from '@/app/lib/types'
 import { Shield, Target, BookOpen, Cpu, Globe, Heart, Award, ArrowRight } from 'lucide-react'
 import { useRef, useEffect } from 'react'
+import { resolvePortalUrl } from '@repo/ui'
+
 
 const coreValues = [
   { icon: BookOpen, idn: 'Berpusat Al-Quran', descId: 'Al-Quran sebagai fondasi utama pendidikan dan pembentukan karakter' },
@@ -306,7 +308,7 @@ export default function AboutClient({ staff }: { staff: Staff[] }) {
           <p className="text-white/60 max-w-lg mx-auto mb-8">
             {'Ambil langkah pertama menuju pendidikan kelas dunia yang menggabungkan keunggulan Al-Quran dengan inovasi digital.'}
           </p>
-          <Link href={process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:5174'} className="inline-flex items-center gap-2 px-6 py-3 bg-white text-[var(--accent)] text-sm font-bold rounded-full hover:bg-white/90 transition-all shadow-md">
+          <Link href={resolvePortalUrl(process.env.NEXT_PUBLIC_PORTAL_URL)} className="inline-flex items-center gap-2 px-6 py-3 bg-white text-[var(--accent)] text-sm font-bold rounded-full hover:bg-white/90 transition-all shadow-md">
             {'Daftar Sekarang'}
             <ArrowRight className="w-4 h-4" />
           </Link>
