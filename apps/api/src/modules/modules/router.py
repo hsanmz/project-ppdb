@@ -12,7 +12,7 @@ router = APIRouter()
 def list_modules(user: dict[str, Any] = Depends(get_current_user)):
     mod_rows = execute_raw("SELECT id, `key`, name FROM modules ORDER BY name")
     page_rows = execute_raw(
-        "SELECT id, module_id, `key`, label, icon, sort_order "
+        "SELECT id, module_id, `key`, label, icon, sort_order, has_crud "
         "FROM pages ORDER BY module_id, sort_order"
     )
 
@@ -28,6 +28,7 @@ def list_modules(user: dict[str, Any] = Depends(get_current_user)):
                 "label": p["label"],
                 "icon": p["icon"],
                 "sort_order": p["sort_order"],
+                "has_crud": bool(p.get("has_crud", 1)),
             }
         )
 

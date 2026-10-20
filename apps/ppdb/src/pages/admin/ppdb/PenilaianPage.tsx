@@ -36,7 +36,7 @@ import ToolbarCard from '@/components/shared/ToolbarCard'
 import OfficialAssessmentSheet from '@/components/shared/OfficialAssessmentSheet'
 import { downloadAssessmentDoc } from '@/utils/exportAssessment'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { cn } from '@/lib/utils'
 
 function SelectionBadge({ status }: { status?: string }) {
@@ -73,7 +73,7 @@ interface ScoreDetailModalProps {
 function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logoUrl }: ScoreDetailModalProps) {
   const assessmentSheetRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('penilaian')
   const queryClient = useQueryClient()
   const [verdictMode, setVerdictMode] = useState<'passed' | 'failed' | 'selection' | null>(null)
   const [verdictReason, setVerdictReason] = useState('')

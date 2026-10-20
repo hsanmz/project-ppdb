@@ -1,5 +1,5 @@
 import uuid
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -63,6 +63,14 @@ class UserRepository:
         )
         return [p.page_id for p in perms]
 
+    def get_page_permissions_detail(self, user_id: str) -> list[dict[str, Any]]:
+        perms = (
+            self.db.query(UserPagePermission)
+            .filter(UserPagePermission.user_id == user_id)
+            .all()
+        )
+        return [{"page_id": p.page_id, "can_crud": bool(p.can_crud)} for p in perms]
+
     def get_page_keys(self, user_id: str) -> list[str]:
         rows = (
             self.db.query(Page.key)
@@ -72,7 +80,20 @@ class UserRepository:
         )
         return [r[0] for r in rows]
 
-    def set_page_permissions(self, user_id: str, page_ids: list[str]) -> None:
+    def get_page_keys_and_crud(self, user_id: str) -> tuple[list[str], list[str]]:
+        rows = (
+            self.db.query(Page.key, UserPagePermission.can_crud)
+            .join(UserPagePermission, UserPagePermission.page_id == Page.id)
+            .filter(UserPagePermission.user_id == user_id)
+            .all()
+        )
+        page_keys = [r[0] for r in rows]
+        crud_keys = [r[0] for r in rows if r[1]]
+        return page_keys, crud_keys
+
+    def set_page_permissions(
+        self, user_id: str, items: list[str] | list[dict[str, Any]] | list[Any]
+    ) -> None:
         # Delete existing
         self.db.query(UserPagePermission).filter(
             UserPagePermission.user_id == user_id
@@ -85,12 +106,27 @@ class UserRepository:
 
         # Insert new
         new_perms = []
-        for page_id in page_ids:
+        for item in items:
+            if isinstance(item, str):
+                page_id = item
+                can_crud = True
+            elif isinstance(item, dict):
+                page_id = item.get("page_id", "")
+                can_crud = bool(item.get("can_crud", True))
+            else:
+                # Pydantic model
+                page_id = getattr(item, "page_id", "")
+                can_crud = bool(getattr(item, "can_crud", True))
+
+            if not page_id:
+                continue
+
             new_perms.append(
                 UserPagePermission(
                     id=str(uuid.uuid4()),
                     user_id=user_id,
                     page_id=page_id,
+                    can_crud=can_crud,
                     created_at=now,
                 )
             )

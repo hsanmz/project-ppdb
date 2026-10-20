@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '@/api/client'
 import { useToast } from '@/components/Toast'
+import { useCanPage } from '@/hooks/useCan'
 import {
   Button,
   Badge,
@@ -35,6 +36,7 @@ export default function SessionEvaluationPage() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { canCrud } = useCanPage('sessions')
 
   const isTahfidz = sessionType.toLowerCase().includes('tahfidz')
   const sessionLabel = isTahfidz ? 'Ujian Tahfidz' : 'Wawancara'
@@ -352,14 +354,16 @@ export default function SessionEvaluationPage() {
                 </span>
               </div>
 
-              <Button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-                className="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2 text-xs sm:text-sm font-semibold shadow-xs transition-all active:scale-98 shrink-0"
-              >
-                <Save className="h-4 w-4 shrink-0" />
-                <span>{saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}</span>
-              </Button>
+              {canCrud && (
+                <Button
+                  onClick={() => saveMutation.mutate()}
+                  disabled={saveMutation.isPending}
+                  className="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2 text-xs sm:text-sm font-semibold shadow-xs transition-all active:scale-98 shrink-0"
+                >
+                  <Save className="h-4 w-4 shrink-0" />
+                  <span>{saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -433,24 +437,26 @@ export default function SessionEvaluationPage() {
                         {/* Kolom Kanan: Rekomendasi Chip + Input & /100 Sejajar Sempurna */}
                         <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                           {/* Rekomendasi Cepat Nilai */}
-                          <div className="hidden sm:flex items-center gap-1 mr-1">
-                            {[75, 85, 95].map((preset) => (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => setScores((prev) => ({ ...prev, [cr.id]: preset }))}
-                                className={cn(
-                                  "h-7 px-2 text-[10px] font-semibold rounded-md border transition-all active:scale-95",
-                                  currentVal === preset
-                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300"
-                                )}
-                                title={`Pilih nilai ${preset}`}
-                              >
-                                {preset}
-                              </button>
-                            ))}
-                          </div>
+                          {canCrud && (
+                            <div className="hidden sm:flex items-center gap-1 mr-1">
+                              {[75, 85, 95].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => setScores((prev) => ({ ...prev, [cr.id]: preset }))}
+                                  className={cn(
+                                    "h-7 px-2 text-[10px] font-semibold rounded-md border transition-all active:scale-95",
+                                    currentVal === preset
+                                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300"
+                                  )}
+                                  title={`Pilih nilai ${preset}`}
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          )}
 
                           {/* Unified Input Group: Input & /100 Locked Vertically Inline */}
                           <div className="flex items-center h-9 rounded-lg border border-slate-200 bg-white focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 overflow-hidden shadow-2xs">
@@ -459,6 +465,7 @@ export default function SessionEvaluationPage() {
                               min={0}
                               max={100}
                               placeholder="0"
+                              disabled={!canCrud}
                               value={currentVal}
                               onChange={(e) => {
                                 const val =
@@ -496,10 +503,11 @@ export default function SessionEvaluationPage() {
             </div>
             <Textarea
               rows={4}
-              placeholder="Tuliskan catatan evaluasi, kekuatan santri, rekomendasi pembinaan, atau poin penting lainnya..."
+              disabled={!canCrud}
+              placeholder={canCrud ? "Tuliskan catatan evaluasi, kekuatan santri, rekomendasi pembinaan, atau poin penting lainnya..." : "Tidak ada catatan evaluasi"}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="text-xs resize-none rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20 leading-relaxed p-3.5"
+              className="text-xs resize-none rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20 leading-relaxed p-3.5 disabled:opacity-80 disabled:bg-slate-50"
             />
           </div>
 

@@ -160,7 +160,33 @@ class AuthService:
                         role_permissions = raw
                 is_superadmin = bool(role.is_superadmin)
 
-        page_keys = self.repository.get_page_permissions(user.id)
+        is_sa = is_superadmin or user.user_type == "superadmin"
+        page_keys, crud_keys = self.repository.get_page_and_crud_permissions(user.id)
+
+        # Default permissions when not explicitly restricted:
+        if is_sa:
+            from src.core.database import execute_raw
+
+            all_pages = execute_raw("SELECT `key`, has_crud FROM pages")
+            page_keys = [p["key"] for p in all_pages]
+            crud_keys = [p["key"] for p in all_pages if p.get("has_crud")]
+        elif not page_keys and role_permissions:
+            allowed_mods = [k for k, v in role_permissions.items() if v and v != "none"]
+            if allowed_mods:
+                from src.core.database import execute_raw
+
+                mod_clause = ", ".join(f"'{m}'" for m in allowed_mods)
+                mod_pages = execute_raw(
+                    f"SELECT p.`key`, p.has_crud FROM pages p "
+                    f"JOIN modules m ON p.module_id = m.id "
+                    f"WHERE m.`key` IN ({mod_clause})"
+                )
+                page_keys = [p["key"] for p in mod_pages]
+                crud_keys = [p["key"] for p in mod_pages if p.get("has_crud")]
+
+        # /dashboard is always granted by default if user has access to ppdb
+        if ("ppdb" in role_permissions or is_sa) and "dashboard" not in page_keys:
+            page_keys.append("dashboard")
 
         payment_status = None
         payment_deadline = None
@@ -187,8 +213,9 @@ class AuthService:
             "role_name": role_name,
             "permissions": role_permissions,
             "page_permissions": page_keys,
+            "crud_permissions": crud_keys,
             "user_type": user.user_type or "admin",
-            "is_superadmin": is_superadmin or user.user_type == "superadmin",
+            "is_superadmin": is_sa,
             "is_active": user.is_active,
             "created_at": (user.created_at.isoformat() if user.created_at else None),
             "last_login_at": (

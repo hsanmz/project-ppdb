@@ -24,7 +24,9 @@ interface AuditRow {
 }
 
 function formatDateTime(value: string) {
-  const d = new Date(value)
+  if (!value) return '—'
+  const v = value.includes(' ') && !value.includes('T') ? value.replace(' ', 'T') : value
+  const d = new Date(v)
   if (isNaN(d.getTime())) return '—'
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
 }
@@ -56,13 +58,15 @@ export default function ActivitiesPage() {
   const fetchLogs = async () => {
     setLoading(true)
     try {
-      const res = await api.getAuditLogs({
-        search,
-        entity_type: entityType,
-        action,
+      const params: Record<string, any> = {
         page,
         per_page: perPage,
-      })
+      }
+      if (search.trim()) params.search = search.trim()
+      if (entityType) params.entity_type = entityType
+      if (action) params.action = action
+
+      const res = await api.getAuditLogs(params)
       setLogs(res?.data || [])
       setTotal(res?.total ?? 0)
       if (res?.entity_types) setEntityTypes(res.entity_types)
@@ -75,7 +79,6 @@ export default function ActivitiesPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search, entityType, action])

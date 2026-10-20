@@ -776,7 +776,7 @@ export default function NotificationsPage() {
       <PageHero
         eyebrow="Komunikasi"
         title="Notifikasi"
-        description="Kirim pesan, kelola template, dan pantau log pengiriman via WhatsApp & Email."
+        description="Kirim pesan, kelola template, dan pantau log pengiriman notifikasi via WhatsApp."
         docKey="superadmin-notifications"
         loading={tplLoading && templates.length === 0}
         chips={[

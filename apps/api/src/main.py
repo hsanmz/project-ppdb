@@ -113,6 +113,8 @@ def _validate_secrets() -> None:
         "dev-only-cron-secret-change-me",
         "change-me",
         "change-me-to-a-long-random-hex-string",
+        "ganti_dengan_string_panjang_acak_minimal_32_karakter",
+        "ganti_dengan_string_panjang_acak_minimal_16_karakter",
     }
     if (
         not settings.jwt_secret

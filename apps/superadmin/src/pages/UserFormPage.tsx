@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, KeyRound, Trash2, UserRound, ShieldCheck, CheckCircle2 } from 'lucide-react'
 import PageHero from '../components/PageHero'
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui"
 import { Label } from "@/components/ui"
 import { Card, CardContent } from "@/components/ui"
 import { Switch } from "@/components/ui"
-import { Checkbox } from "@/components/ui"
+import { Checkbox, Badge } from "@/components/ui"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui"
@@ -65,8 +65,8 @@ export default function UserFormPage() {
 
   const [roles, setRoles] = useState<Role[]>([])
   const [modules, setModules] = useState<Module[]>([])
-  const [restrictedPages, setRestrictedPages] = useState<Record<string, string[]>>({})
-  const [hasPageRestrictions, setHasPageRestrictions] = useState(false)
+  const [pageConfig, setPageConfig] = useState<Record<string, { enabled: boolean; can_crud: boolean }>>({})
+  const [hasExistingSavedPermissions, setHasExistingSavedPermissions] = useState(false)
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [fetching, setFetching] = useState(isEdit)
@@ -89,6 +89,7 @@ export default function UserFormPage() {
   const formUserType = watch('user_type')
   const formUsername = watch('username')
   const formIsActive = watch('is_active')
+  const formRoleId = watch('role_id')
 
   useEffect(() => {
     let active = true
@@ -118,20 +119,20 @@ export default function UserFormPage() {
             user_type: user.user_type || 'admin',
             is_active: user.is_active ?? true,
           })
-          if (perms.page_ids.length > 0) {
-            setHasPageRestrictions(true)
-            const byModule: Record<string, string[]> = {}
-            for (const pid of perms.page_ids) {
-              for (const mod of modulesData) {
-                const page = mod.pages.find(p => p.id === pid)
-                if (page) {
-                  if (!byModule[mod.key]) byModule[mod.key] = []
-                  byModule[mod.key].push(pid)
-                  break
-                }
-              }
+          if (perms.permissions && perms.permissions.length > 0) {
+            setHasExistingSavedPermissions(true)
+            const cfg: Record<string, { enabled: boolean; can_crud: boolean }> = {}
+            for (const p of perms.permissions) {
+              cfg[p.page_id] = { enabled: true, can_crud: p.can_crud }
             }
-            setRestrictedPages(byModule)
+            setPageConfig(cfg)
+          } else if (perms.page_ids && perms.page_ids.length > 0) {
+            setHasExistingSavedPermissions(true)
+            const cfg: Record<string, { enabled: boolean; can_crud: boolean }> = {}
+            for (const pid of perms.page_ids) {
+              cfg[pid] = { enabled: true, can_crud: true }
+            }
+            setPageConfig(cfg)
           }
         }
       } catch {
@@ -186,6 +187,7 @@ export default function UserFormPage() {
   async function executeSubmit(data: UserFormValues) {
     setLoading(true)
     try {
+      let targetUserId = id
       if (isEdit && id) {
         const payload: any = {
           username: data.username,
@@ -198,15 +200,8 @@ export default function UserFormPage() {
         }
         if (data.password) payload.password = data.password
         await api.updateUser(id, payload)
-
-        if (hasPageRestrictions) {
-          const allPageIds = Object.values(restrictedPages).flat()
-          await api.updateUserPagePermissions(id, allPageIds)
-        } else {
-          await api.updateUserPagePermissions(id, [])
-        }
       } else {
-        await api.createUser({
+        const newUser = await api.createUser({
           username: data.username,
           email: data.email || undefined,
           phone: data.phone || undefined,
@@ -215,7 +210,24 @@ export default function UserFormPage() {
           role_id: data.role_id || undefined,
           user_type: data.user_type,
         })
+        targetUserId = newUser?.id
       }
+
+      if (targetUserId && data.user_type !== 'superadmin') {
+        const permList: Array<{ page_id: string; can_crud: boolean }> = []
+        for (const mod of visibleModules) {
+          for (const page of mod.pages) {
+            const isDashboard = page.key === 'dashboard' || page.key === 'admin-dashboard'
+            const enabled = isDashboard || isPageEnabled(page.id, page.key)
+            if (enabled) {
+              const canCrud = isDashboard ? false : (page.has_crud !== false ? isPageCanCrud(page.id, page.key, page.has_crud) : false)
+              permList.push({ page_id: page.id, can_crud: canCrud })
+            }
+          }
+        }
+        await api.updateUserPagePermissions(targetUserId, { permissions: permList })
+      }
+
       toast('success', isEdit ? 'User berhasil diperbarui' : 'User berhasil dibuat')
       queryClient.invalidateQueries({ queryKey: ['users'] })
       navigate('/users')
@@ -251,23 +263,64 @@ export default function UserFormPage() {
     setConfirmOpen(true)
   }
 
-  function togglePageRestriction(moduleKey: string, pageId: string) {
-    setRestrictedPages(prev => {
-      const current = prev[moduleKey] || []
-      if (current.includes(pageId)) {
-        const next = current.filter(id => id !== pageId)
-        const copy = { ...prev }
-        if (next.length === 0) delete copy[moduleKey]
-        else copy[moduleKey] = next
-        return copy
-      } else {
-        return { ...prev, [moduleKey]: [...current, pageId] }
-      }
-    })
+  const selectedRole = useMemo(() => {
+    return roles.find(r => r.id === formRoleId)
+  }, [roles, formRoleId])
+
+  const allowedModuleKeys = useMemo(() => {
+    if (!selectedRole || !selectedRole.permissions) return []
+    return Object.entries(selectedRole.permissions)
+      .filter(([_, level]) => level && level !== 'none')
+      .map(([key]) => key)
+  }, [selectedRole])
+
+  const visibleModules = useMemo(() => {
+    return modules.filter(m => allowedModuleKeys.includes(m.key))
+  }, [modules, allowedModuleKeys])
+
+  const isPageEnabled = (pageId: string, pageKey: string) => {
+    if (pageKey === 'dashboard' || pageKey === 'admin-dashboard') return true
+    if (pageConfig[pageId] !== undefined) {
+      return pageConfig[pageId].enabled
+    }
+    if (hasExistingSavedPermissions) {
+      return false
+    }
+    return true
   }
 
-  function isPageChecked(moduleKey: string, pageId: string): boolean {
-    return (restrictedPages[moduleKey] || []).includes(pageId)
+  const isPageCanCrud = (pageId: string, pageKey: string, hasCrud?: boolean) => {
+    if (hasCrud === false || pageKey === 'dashboard' || pageKey === 'admin-dashboard') return false
+    if (pageConfig[pageId] !== undefined) {
+      return pageConfig[pageId].can_crud
+    }
+    return true
+  }
+
+  const togglePageAccess = (page: { id: string; key: string; has_crud?: boolean }) => {
+    if (page.key === 'dashboard' || page.key === 'admin-dashboard') return
+    const currentEnabled = isPageEnabled(page.id, page.key)
+    const currentCrud = isPageCanCrud(page.id, page.key, page.has_crud)
+    setPageConfig(prev => ({
+      ...prev,
+      [page.id]: {
+        enabled: !currentEnabled,
+        can_crud: currentCrud,
+      },
+    }))
+  }
+
+  const togglePageCrud = (page: { id: string; key: string; has_crud?: boolean }) => {
+    if (page.has_crud === false || page.key === 'dashboard' || page.key === 'admin-dashboard') return
+    const currentEnabled = isPageEnabled(page.id, page.key)
+    const currentCrud = isPageCanCrud(page.id, page.key, page.has_crud)
+    setPageConfig(prev => ({
+      ...prev,
+      [page.id]: {
+        enabled: currentEnabled,
+        can_crud: !currentCrud,
+      },
+    }))
   }
 
   if (fetching) {
@@ -445,63 +498,125 @@ export default function UserFormPage() {
           </CardContent>
         </Card>
 
-        {/* Page Permissions Section - only on edit */}
-        {isEdit && formUserType !== 'superadmin' && (
+        {/* Page & CRUD Permissions Section */}
+        {formUserType !== 'superadmin' && (
           <Card>
             <CardContent className="space-y-4 p-6 md:p-8">
               <div className="flex items-center gap-2">
-                <div className="h-4 w-1 rounded-full bg-warning" />
+                <div className="h-4 w-1 rounded-full bg-primary" />
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Pengecualian / Pembatasan Halaman (Opsional)
+                  Hak Akses Halaman & Izin CRUD Per Halaman
                 </span>
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                Secara bawaan, user ini bisa mengakses semua halaman sesuai dengan rolenya. Jika Anda ingin membatasinya hanya ke beberapa halaman tertentu saja (mengecualikan halaman lain), centang opsi di bawah ini.
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Pilih halaman yang diizinkan untuk dibuka oleh user ini, dan tentukan apakah user memiliki izin untuk melakukan aksi (CRUD: Tambah / Ubah / Hapus). Halaman dashboard selalu aktif sebagai akses utama.
               </p>
 
-              <label className="flex cursor-pointer items-center gap-2">
-                <Checkbox
-                  checked={hasPageRestrictions}
-                  onCheckedChange={(checked) => {
-                    setHasPageRestrictions(Boolean(checked))
-                    if (!checked) setRestrictedPages({})
-                  }}
-                />
-                <span className="text-sm font-medium text-foreground">Saya ingin membatasi akses halaman user ini</span>
-              </label>
-
-              {hasPageRestrictions && (
-                <div className="space-y-4 border-l-2 border-warning/30 pl-4">
-                  <p className="text-xs font-medium text-warning">
-                    Pilih halaman spesifik yang BOLEH diakses oleh user ini:
-                  </p>
-                  {modules.map(mod => (
-                    <div key={mod.id}>
-                      <h4 className="mb-2 text-sm font-semibold text-foreground">{mod.name}</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:grid-cols-3">
-                        {mod.pages.map(page => (
-                          <label
-                            key={page.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-accent"
-                          >
-                            <Checkbox
-                              checked={isPageChecked(mod.key, page.id)}
-                              onCheckedChange={() => togglePageRestriction(mod.key, page.id)}
-                            />
-                            <span className="text-muted-foreground">{page.label}</span>
-                          </label>
-                        ))}
+              <div className="space-y-6 pt-2">
+                {!formRoleId ? (
+                  <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/60 p-4 text-center text-xs text-amber-700">
+                    Silakan pilih <strong>Role</strong> pada formulir di atas terlebih dahulu untuk menampilkan daftar halaman modul yang tersedia.
+                  </div>
+                ) : visibleModules.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                    Role yang dipilih belum memiliki modul login yang diaktifkan. Harap atur izin modul pada menu <strong>Role</strong> terlebih dahulu.
+                  </div>
+                ) : (
+                  visibleModules.map((mod) => (
+                    <div key={mod.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                          <span>{mod.name}</span>
+                        </h4>
+                        <span className="text-[11px] text-muted-foreground font-medium">
+                          {mod.pages.length} Halaman Tersedia
+                        </span>
                       </div>
-                      {restrictedPages[mod.key]?.length > 0 && (
-                        <p className="mt-1 text-[11px] text-warning">
-                          {restrictedPages[mod.key].length} dari {mod.pages.length} halaman dipilih
-                        </p>
-                      )}
+
+                      <div className="space-y-2.5">
+                        {mod.pages.map((page) => {
+                          const isDashboard = page.key === 'dashboard' || page.key === 'admin-dashboard'
+                          const isEnabled = isPageEnabled(page.id, page.key)
+                          const canCrud = isPageCanCrud(page.id, page.key, page.has_crud)
+                          const hasCrudSupport = page.has_crud !== false && !isDashboard
+
+                          return (
+                            <div
+                              key={page.id}
+                              className={cn(
+                                "flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3 transition-colors",
+                                isEnabled
+                                  ? "border-primary/30 bg-card shadow-xs"
+                                  : "border-border/60 bg-muted/40 opacity-70"
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  checked={isEnabled}
+                                  disabled={isDashboard}
+                                  onCheckedChange={() => togglePageAccess(page)}
+                                />
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-foreground">
+                                      {page.label}
+                                    </span>
+                                    {isDashboard && (
+                                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                                        Akses Utama (Selalu Aktif)
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Rute: <code className="text-[10px] font-mono">/{page.key}</code>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 pl-7 sm:pl-0">
+                                {isDashboard ? (
+                                  <span className="text-[11px] text-muted-foreground italic">
+                                    Dashboard utama
+                                  </span>
+                                ) : hasCrudSupport ? (
+                                  <div className="flex items-center gap-2">
+                                    {isEnabled ? (
+                                      <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5">
+                                        <div className="flex flex-col text-right">
+                                          <span className="text-[11px] font-semibold text-foreground">
+                                            {canCrud ? 'Bisa CRUD (Aksi Aktif)' : 'Read-Only (Hanya Lihat)'}
+                                          </span>
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {canCrud ? 'Tombol aksi muncul' : 'Tombol aksi hilang'}
+                                          </span>
+                                        </div>
+                                        <Switch
+                                          checked={canCrud}
+                                          onCheckedChange={() => togglePageCrud(page)}
+                                          title="Izinkan user menambah, mengubah, atau menghapus data di halaman ini"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <span className="text-[11px] text-muted-foreground">
+                                        Akses Belum Diaktifkan
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px] font-normal text-muted-foreground">
+                                    Monitoring / Read-Only
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         )}

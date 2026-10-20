@@ -22,7 +22,7 @@ import {
   toWhatsAppId,
   maskPhone,
 } from "../lib/phoneUtils";
-import { getRetryDelay, NON_RETRYABLE_ERRORS } from "../lib/retry";
+import { getRetryDelay, NON_RETRYABLE_ERRORS, MAX_RETRY_ATTEMPTS } from "../lib/retry";
 import { sessionManager } from "../services/SessionManager";
 import { auditLogService } from "../services/AuditLogService";
 import { webhookService } from "../services/WebhookService";
@@ -215,11 +215,38 @@ export function createMessageWorker(): Worker<SendMessageJobData, MessageJobResu
   worker.on("failed", (job, err) => {
     const e = err as Error & { code?: string };
     const isNonRetryable = e.code && NON_RETRYABLE_ERRORS.includes(e.code);
+    const maxAttempts = job?.opts?.attempts ?? MAX_RETRY_ATTEMPTS;
+    const isAttemptsExhausted = job ? job.attemptsMade >= maxAttempts : false;
 
     if (isNonRetryable) {
       logger.info("[Worker] Job permanently failed (non-retryable)", {
         jobId: job?.id,
         code: e.code,
+      });
+    } else if (isAttemptsExhausted && job) {
+      logger.error("[Worker] Job permanently failed — max retries exhausted", {
+        jobId: job.id,
+        attempts: job.attemptsMade,
+        error: e.message,
+      });
+      const { jobId, to, eventKey, recipientUserId, logId } = job.data;
+      if (logId) {
+        auditLogService
+          .markFailed(
+            logId,
+            `Exceeded max retries (${job.attemptsMade}): ${e.message}`,
+            job.attemptsMade,
+            "failed"
+          )
+          .catch(() => {});
+      }
+      webhookService.dispatch("message.failed", {
+        jobId,
+        to: maskPhone(to),
+        errorCode: "max_retries_exceeded",
+        errorMessage: e.message,
+        eventKey,
+        recipientUserId,
       });
     } else {
       logger.warn("[Worker] Job failed — will retry", {

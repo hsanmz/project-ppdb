@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '@/api/client'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { Button, Card, CardContent, Input, Label, Badge } from '@/components/ui'
 import { DocTrigger } from '@repo/ui'
 
@@ -18,7 +18,7 @@ type TIUSettings = {
 
 export default function TIUSettingsPage() {
   const { toast } = useToast()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('tiu-settings')
   const queryClient = useQueryClient()
   const [formUrl, setFormUrl] = useState('')
   const [duration, setDuration] = useState('')
@@ -247,19 +247,20 @@ export default function TIUSettingsPage() {
               <p className="text-[11px] text-muted-foreground">
                 Perubahan langsung berlaku ke seluruh pendaftaran aktif.
               </p>
-              <Button
-                onClick={() => saveSettings.mutate()}
-                disabled={
-                  !canCrud ||
-                  settingsQuery.isLoading ||
-                  saveSettings.isPending ||
-                  !isFormValid
-                }
-                className="gap-2 h-9 px-5 text-xs font-semibold w-full sm:w-auto shrink-0"
-              >
-                <Save className="h-3.5 w-3.5" />
-                {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
-              </Button>
+              {canCrud && (
+                <Button
+                  onClick={() => saveSettings.mutate()}
+                  disabled={
+                    settingsQuery.isLoading ||
+                    saveSettings.isPending ||
+                    !isFormValid
+                  }
+                  className="gap-2 h-9 px-5 text-xs font-semibold w-full sm:w-auto shrink-0"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

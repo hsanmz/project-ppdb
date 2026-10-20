@@ -3,6 +3,9 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
+    // TypeScript 6.0 deprecates node10 resolution for removal in TS 7.0.
+    // Proyek ini adalah runtime CommonJS (whatsapp-web.js CJS dependency, tanpa extension .js pada import).
+    // ignoreDeprecations: "6.0" diaktifkan sesuai rekomendasi resmi TS6 untuk mempertahankan kompatibilitas CJS.
     "ignoreDeprecations": "6.0",
     "lib": ["ES2022"],
     "outDir": "dist",

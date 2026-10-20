@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import * as api from '@/api/client'
 import { Card, CardContent } from "@/components/ui"
 import { Button } from "@/components/ui"
@@ -27,6 +27,7 @@ interface TransactionItem {
 }
 
 export default function PembayaranFormulirPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const statusFilter = searchParams.get('status') || ''
   const [page, setPage] = useState(1)
@@ -63,7 +64,7 @@ export default function PembayaranFormulirPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeaderCard
         title="Pembayaran Formulir"
-        description="Monitoring transaksi pembayaran formulir pendaftaran calon santri pada periode aktif."
+        description="Monitoring transaksi pembayaran formulir pendaftaran calon santri pada periode aktif. Klik baris transaksi untuk melihat kuitansi resmi."
         loading={loading}
         docKey="ppdb-pembayaran-formulir"
         action={
@@ -162,18 +163,25 @@ export default function PembayaranFormulirPage() {
                   </tr>
                 ) : (
                   transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs font-semibold text-slate-700">
+                    <tr
+                      key={tx.id}
+                      onClick={() => navigate(`/admin/kuitansi/${tx.id}`)}
+                      title="Klik untuk melihat kuitansi resmi"
+                      className="hover:bg-slate-50/80 dark:hover:bg-muted/40 cursor-pointer transition-colors group"
+                    >
+                      <td className="py-3 px-4 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
                         {tx.invoice_no || tx.id.slice(0, 8)}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-800">{tx.applicant_name || '-'}</div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                          {tx.applicant_name || '-'}
+                        </div>
                         <div className="text-xs text-muted-foreground">{tx.applicant_email || '-'}</div>
                         {tx.wave_name && (
-                          <div className="text-[11px] text-emerald-700/80">{tx.wave_name}</div>
+                          <div className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">{tx.wave_name}</div>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-700">
+                      <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
                         {formatRp(tx.amount)}
                       </td>
                       <td className="py-3 px-4">

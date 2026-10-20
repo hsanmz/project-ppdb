@@ -17,6 +17,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
@@ -239,8 +240,26 @@ def tiu_webhook(
         .first()
     )
     if score_entry:
-        score_entry.score = payload.score
-        score_entry.updated_at = now
+        if score_entry.score == payload.score:
+            return {
+                "status": "success",
+                "score": payload.score,
+                "already_recorded": True,
+            }
+        logger.warning(
+            "Webhook TIU ditolak: nilai untuk pendaftar %s "
+            "sudah tercatat final (%s vs %s)",
+            applicant.id,
+            score_entry.score,
+            payload.score,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Nilai ujian TIU sudah tercatat final "
+                f"({score_entry.score}) dan tidak dapat diubah."
+            ),
+        )
     else:
         import uuid
 
@@ -254,7 +273,34 @@ def tiu_webhook(
         )
         db.add(score_entry)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Jika request paralel lain sudah berhasil insert lebih dulu
+        existing = (
+            db.query(SelectionScore)
+            .filter(
+                SelectionScore.applicant_id == applicant.id,
+                SelectionScore.criteria_id == criteria.id,
+            )
+            .first()
+        )
+        if existing and existing.score == payload.score:
+            return {
+                "status": "success",
+                "score": payload.score,
+                "already_recorded": True,
+            }
+        elif existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Nilai ujian TIU sudah tercatat final "
+                    f"({existing.score}) dan tidak dapat diubah."
+                ),
+            )
+        raise
 
     try:
         from src.core.notif_service import send_notification

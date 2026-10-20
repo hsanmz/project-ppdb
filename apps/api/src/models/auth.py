@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base
@@ -78,6 +78,7 @@ class UserPagePermission(Base):
     page_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("pages.id", ondelete="CASCADE")
     )
+    can_crud: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -118,5 +119,8 @@ class Page(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     icon: Mapped[str] = mapped_column(String(50), default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    has_crud: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

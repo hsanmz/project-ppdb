@@ -50,6 +50,17 @@ echo ""
 echo "Running: test ACME webroot reachable via nginx..."
 echo ""
 
+# Deteksi opsi staging/dry-run untuk mencegah rate limit Let's Encrypt saat uji coba
+EXTRA_FLAGS=()
+if [[ "${LETSENCRYPT_STAGING:-false}" == "true" ]] || [[ "${*:-}" =~ "--staging" ]]; then
+  echo "[INFO] Menggunakan Let's Encrypt Staging environment (mencegah penalti rate limit)."
+  EXTRA_FLAGS+=("--staging")
+fi
+if [[ "${*:-}" =~ "--dry-run" ]]; then
+  echo "[INFO] Menjalankan dalam mode --dry-run (simulasi tanpa penerbitan permanen)."
+  EXTRA_FLAGS+=("--dry-run")
+fi
+
 # Minta sertifikat per domain agar tiap domain memiliki folder
 # /etc/letsencrypt/live/<domain>/ tersendiri sesuai ekspektasi 30-generate-sites.sh.
 for domain in "$DOMAIN_COMPANYPROFILE" "$DOMAIN_PPDB" "$DOMAIN_SUPERADMIN" "$DOMAIN_API"; do
@@ -59,7 +70,8 @@ for domain in "$DOMAIN_COMPANYPROFILE" "$DOMAIN_PPDB" "$DOMAIN_SUPERADMIN" "$DOM
     --email "$LETSENCRYPT_EMAIL" \
     --agree-tos --no-eff-email --non-interactive \
     --cert-name "$domain" \
-    -d "$domain"
+    -d "$domain" \
+    "${EXTRA_FLAGS[@]}"
 done
 
 echo ""

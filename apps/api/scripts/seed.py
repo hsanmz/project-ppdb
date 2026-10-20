@@ -407,6 +407,7 @@ def ensure_modules_and_pages() -> None:
                         "label": label,
                         "icon": icon,
                         "sort_order": sort_order,
+                        "has_crud": True,
                         "created_at": now,
                         "updated_at": now,
                     },

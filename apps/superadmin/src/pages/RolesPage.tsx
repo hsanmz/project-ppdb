@@ -65,9 +65,11 @@ export default function RolesPage() {
   }
 
   function getPermissionBadges(permissions: Record<string, string>) {
-    return Object.entries(permissions).map(([mod, level]) => (
-      <Badge key={mod} variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-        {mod}: {level}
+    const active = Object.entries(permissions || {}).filter(([_, lvl]) => lvl && lvl !== 'none')
+    if (active.length === 0) return <span className="text-xs text-muted-foreground">—</span>
+    return active.map(([mod]) => (
+      <Badge key={mod} variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 font-medium">
+        {mod === 'ppdb' ? 'PPDB' : mod === 'companyprofile' ? 'Company Profile' : mod}
       </Badge>
     ))
   }

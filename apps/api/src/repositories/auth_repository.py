@@ -36,6 +36,21 @@ class AuthRepository:
         )
         return [p[0] for p in pages]
 
+    def get_page_and_crud_permissions(
+        self, user_id: str
+    ) -> tuple[list[str], list[str]]:
+        from src.models.auth import Page
+
+        rows = (
+            self.db.query(Page.key, UserPagePermission.can_crud)
+            .join(UserPagePermission, UserPagePermission.page_id == Page.id)
+            .filter(UserPagePermission.user_id == user_id)
+            .all()
+        )
+        page_keys = [r[0] for r in rows]
+        crud_keys = [r[0] for r in rows if r[1]]
+        return page_keys, crud_keys
+
     def get_applicant_by_user_id(self, user_id: str) -> PPDBApplicant | None:
         return cast(
             PPDBApplicant | None,

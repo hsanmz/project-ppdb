@@ -233,10 +233,10 @@ export default function ApplicantSignLoAModal({
             <Button
               type="submit"
               disabled={signMutation.isPending}
-              className="h-10 text-xs px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold gap-2 shadow-sm"
+              className="h-10 text-xs px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold gap-2 shadow-sm whitespace-nowrap"
             >
-              <Send className="h-3.5 w-3.5" />
-              {signMutation.isPending ? 'Menyimpan Tanda Tangan...' : 'Kirim & Tanda Tangani LoA'}
+              <Send className="h-3.5 w-3.5 shrink-0" />
+              <span>{signMutation.isPending ? 'Menyimpan TTD...' : 'Simpan Tanda Tangan LoA'}</span>
             </Button>
           </div>
         </form>

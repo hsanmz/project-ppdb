@@ -112,6 +112,7 @@ export default function AdminDashboard() {
   // ── Auth state ────────────────────────────────────────────────────────────
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [pagePermissions, setPagePermissions] = useState<string[] | null>(null)
+  const [crudPermissions, setCrudPermissions] = useState<string[] | null>(null)
   const faviconUrl = useAdminFavicon()
 
   const isSuperadmin =
@@ -119,7 +120,11 @@ export default function AdminDashboard() {
 
   const canCrud =
     isSuperadmin ||
-    adminUser?.permissions?.companyprofile === 'crud'
+    (crudPermissions !== null
+      ? crudPermissions.includes(activeTab)
+      : adminUser?.crud_permissions
+      ? adminUser.crud_permissions.includes(activeTab)
+      : adminUser?.permissions?.companyprofile === 'crud')
 
   const filteredTabs =
     isSuperadmin
@@ -157,6 +162,9 @@ export default function AdminDashboard() {
         setPagePermissions(
           data.page_keys && data.page_keys.length > 0 ? data.page_keys : null,
         )
+        if (Array.isArray(data.crud_keys)) {
+          setCrudPermissions(data.crud_keys)
+        }
       } catch { /* ignore */ }
     })
     return () => es.close()
@@ -248,6 +256,9 @@ export default function AdminDashboard() {
             if (me) {
               localStorage.setItem('admin_user', JSON.stringify(me))
               setAdminUser(me)
+              if (me.crud_permissions) {
+                setCrudPermissions(me.crud_permissions)
+              }
             }
           } catch {
             localStorage.removeItem('admin_user')
@@ -261,6 +272,9 @@ export default function AdminDashboard() {
         setAdminUser(parsed)
         if (parsed.page_permissions?.length > 0) {
           setPagePermissions(parsed.page_permissions)
+        }
+        if (parsed.crud_permissions) {
+          setCrudPermissions(parsed.crud_permissions)
         }
       } catch {
         localStorage.removeItem('admin_user')

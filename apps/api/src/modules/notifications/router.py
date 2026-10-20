@@ -407,78 +407,159 @@ async def wa_webhook(request: Request):
 
     event = payload.get("event")
     data = payload.get("data", {})
+    job_id = data.get("jobId")
 
-    pool = get_raw_pool()
-    with pool.connect() as conn:
-        if event == "message.sent":
-            # FIX: Update by job_id saja — tidak boleh pakai OR event_key
-            # karena akan mengupdate log yang salah.
-            # notification_logs.id punya prefix "notiflog-" sehingga kita
-            # simpan job_id di kolom wa_message_id saat enqueue (future).
-            # Untuk sekarang: update baris terbaru yang matching event_key
-            # DAN masih dalam status queued, dibatasi 1 baris.
-            job_id = data.get("jobId")
-            wa_message_id = data.get("waMessageId")
-            event_key = data.get("eventKey", "")
-            recipient_user_id = data.get("recipientUserId", "")
+    # ── Idempotency & Replay Protection ──────────────────────────────────────
+    # Timestamp tolerance mencegah replay attack jangka panjang (>300s).
+    # Namun event yang sama persis bisa dikirim ulang / direplay dalam jendela 5 menit.
+    # Simpan idempotency key secara atomik di Redis untuk menolak eksekusi ganda.
+    from src.core.cache import get_redis
 
-            if job_id and event_key:
-                conn.execute(
-                    text(
-                        "UPDATE notification_logs "
-                        "SET status = 'sent', wa_message_id = :wa_id, sent_at = NOW() "
-                        "WHERE event_key = :event_key "
-                        "AND recipient_user_id = :user_id "
-                        "AND status = 'queued' "
-                        "ORDER BY created_at DESC "
-                        "LIMIT 1"
-                    ),
-                    {
-                        "wa_id": wa_message_id,
-                        "event_key": event_key,
-                        "user_id": recipient_user_id,
-                    },
-                )
-                conn.commit()
-                logger.info("Webhook: message.sent — jobId=%s", job_id)
-
-        elif event == "message.failed":
-            job_id = data.get("jobId")
-            error_code = data.get("errorCode", "unknown")
-            error_msg = data.get("errorMessage", "")
-            event_key = data.get("eventKey", "")
-            recipient_user_id = data.get("recipientUserId", "")
-            status = "invalid_number" if error_code == "invalid_number" else "failed"
-
-            if job_id and event_key:
-                conn.execute(
-                    text(
-                        "UPDATE notification_logs "
-                        "SET status = :status, error_message = :msg "
-                        "WHERE event_key = :event_key "
-                        "AND recipient_user_id = :user_id "
-                        "AND status = 'queued' "
-                        "ORDER BY created_at DESC "
-                        "LIMIT 1"
-                    ),
-                    {
-                        "status": status,
-                        "msg": f"{error_code}: {error_msg}",
-                        "event_key": event_key,
-                        "user_id": recipient_user_id,
-                    },
-                )
-                conn.commit()
+    r = get_redis()
+    idempotency_key = None
+    if r is not None and (job_id or signature):
+        idempotency_key = f"wa_hook_idempotency:{job_id or signature}:{event}"
+        try:
+            is_new = r.set(idempotency_key, "1", nx=True, ex=600)
+            if not is_new:
                 logger.info(
-                    "Webhook: message.failed — jobId=%s, code=%s", job_id, error_code
+                    "Webhook WA diabaikan: event %s untuk job %s "
+                    "sudah diproses sebelumnya (idempoten)",
+                    event,
+                    job_id,
+                )
+                return {
+                    "received": True,
+                    "duplicate": True,
+                    "status": "duplicate_suppressed",
+                }
+        except Exception as exc:
+            logger.warning("Gagal memeriksa idempotency webhook di Redis: %s", exc)
+            idempotency_key = None
+
+    db_committed = False
+    try:
+        pool = get_raw_pool()
+        with pool.connect() as conn:
+            if event == "message.sent":
+                # FIX: Update by job_id saja — tidak boleh pakai OR event_key
+                # karena akan mengupdate log yang salah.
+                # notification_logs.id punya prefix "notiflog-" sehingga kita
+                # simpan job_id di kolom wa_message_id saat enqueue (future).
+                # Untuk sekarang: update baris terbaru yang matching event_key
+                # DAN masih dalam status queued, dibatasi 1 baris.
+                job_id = data.get("jobId")
+                wa_message_id = data.get("waMessageId")
+                event_key = data.get("eventKey", "")
+                recipient_user_id = data.get("recipientUserId", "")
+
+                if job_id and event_key:
+                    res = conn.execute(
+                        text(
+                            "UPDATE notification_logs "
+                            "SET status = 'sent', "
+                            "wa_message_id = COALESCE(:wa_id, wa_message_id), "
+                            "sent_at = NOW() "
+                            "WHERE wa_message_id = :job_id "
+                            "AND status = 'queued' "
+                            "LIMIT 1"
+                        ),
+                        {
+                            "wa_id": wa_message_id or job_id,
+                            "job_id": str(job_id),
+                        },
+                    )
+                    if res.rowcount == 0:
+                        conn.execute(
+                            text(
+                                "UPDATE notification_logs "
+                                "SET status = 'sent', "
+                                "wa_message_id = :wa_id, sent_at = NOW() "
+                                "WHERE event_key = :event_key "
+                                "AND recipient_user_id = :user_id "
+                                "AND status = 'queued' "
+                                "ORDER BY created_at DESC "
+                                "LIMIT 1"
+                            ),
+                            {
+                                "wa_id": wa_message_id or job_id,
+                                "event_key": event_key,
+                                "user_id": recipient_user_id,
+                            },
+                        )
+                    conn.commit()
+                    db_committed = True
+                    logger.info("Webhook: message.sent — jobId=%s", job_id)
+
+            elif event == "message.failed":
+                job_id = data.get("jobId")
+                error_code = data.get("errorCode", "unknown")
+                error_msg = data.get("errorMessage", "")
+                event_key = data.get("eventKey", "")
+                recipient_user_id = data.get("recipientUserId", "")
+                status = (
+                    "invalid_number" if error_code == "invalid_number" else "failed"
                 )
 
-        elif event == "session.ready":
-            logger.info("Webhook: WA session is ready")
-        elif event == "session.disconnected":
-            logger.warning(
-                "Webhook: WA session disconnected — reason=%s", data.get("reason")
-            )
+                if job_id and event_key:
+                    res = conn.execute(
+                        text(
+                            "UPDATE notification_logs "
+                            "SET status = :status, error_message = :msg "
+                            "WHERE wa_message_id = :job_id "
+                            "AND status = 'queued' "
+                            "LIMIT 1"
+                        ),
+                        {
+                            "status": status,
+                            "msg": f"{error_code}: {error_msg}",
+                            "job_id": str(job_id),
+                        },
+                    )
+                    if res.rowcount == 0:
+                        conn.execute(
+                            text(
+                                "UPDATE notification_logs "
+                                "SET status = :status, error_message = :msg "
+                                "WHERE event_key = :event_key "
+                                "AND recipient_user_id = :user_id "
+                                "AND status = 'queued' "
+                                "ORDER BY created_at DESC "
+                                "LIMIT 1"
+                            ),
+                            {
+                                "status": status,
+                                "msg": f"{error_code}: {error_msg}",
+                                "event_key": event_key,
+                                "user_id": recipient_user_id,
+                            },
+                        )
+                    conn.commit()
+                    db_committed = True
+                    logger.info(
+                        "Webhook: message.failed — jobId=%s, code=%s",
+                        job_id,
+                        error_code,
+                    )
+
+            elif event == "session.ready":
+                logger.info("Webhook: WA session is ready")
+            elif event == "session.disconnected":
+                logger.warning(
+                    "Webhook: WA session disconnected — reason=%s", data.get("reason")
+                )
+    except Exception as exc:
+        if r is not None and idempotency_key and not db_committed:
+            try:
+                r.delete(idempotency_key)
+                logger.info(
+                    "Idempotency key %s dibersihkan pasca DB failure "
+                    "agar retry berhasil",
+                    idempotency_key,
+                )
+            except Exception as del_err:
+                logger.warning("Gagal membersihkan idempotency key: %s", del_err)
+        raise exc
 
     return JSONResponse({"received": True, "event": event})
 

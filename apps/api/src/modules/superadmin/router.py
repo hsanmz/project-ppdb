@@ -465,16 +465,21 @@ def list_audit_logs(
         r["k"]
         for r in execute_raw(
             "SELECT DISTINCT `entity_type` AS `k` FROM `audit_log` "
+            "WHERE `entity_type` IS NOT NULL AND `entity_type` != '' "
             "ORDER BY `entity_type`"
         )
         or []
+        if r.get("k")
     ]
     actions = [
         r["k"]
         for r in execute_raw(
-            "SELECT DISTINCT `action` AS `k` FROM `audit_log` ORDER BY `action`"
+            "SELECT DISTINCT `action` AS `k` FROM `audit_log` "
+            "WHERE `action` IS NOT NULL AND `action` != '' "
+            "ORDER BY `action`"
         )
         or []
+        if r.get("k")
     ]
 
     return {

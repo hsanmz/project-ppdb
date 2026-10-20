@@ -22,5 +22,11 @@ class UserUpdate(BaseModel):
     is_active: bool | int | None = None
 
 
+class PagePermissionItem(BaseModel):
+    page_id: str
+    can_crud: bool = True
+
+
 class PagePermissionsUpdate(BaseModel):
-    page_ids: list[str]
+    page_ids: list[str] | None = None
+    permissions: list[PagePermissionItem] | None = None

@@ -39,12 +39,12 @@ export default function ResultStagePage() {
       />
 
       {isLoading ? (
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-sm space-y-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm space-y-4">
           <Skeleton className="h-10 w-1/3" />
           <Skeleton className="h-40 w-full" />
         </div>
       ) : (
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm border border-slate-200">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-8 shadow-sm border border-slate-200">
           <LoaResultStep
             applicant={applicant}
             selectionResult={selectionQuery.data ?? null}

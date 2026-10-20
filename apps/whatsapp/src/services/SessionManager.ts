@@ -89,10 +89,14 @@ export class SessionManager extends EventEmitter {
       "--disable-gpu",
       "--window-size=1280,720",
       "--no-first-run",
-      "--no-zygote",
-      "--single-process",
       "--disable-crash-reporter",
     ];
+
+    if (process.platform === "linux") {
+      puppeteerArgs.push("--no-zygote");
+    }
+
+    const executablePath = this.resolveChromiumExecutablePath();
 
     this.client = new Client({
       authStrategy: new LocalAuth({
@@ -101,7 +105,7 @@ export class SessionManager extends EventEmitter {
       }),
       puppeteer: {
         headless: true,
-        executablePath: env.CHROMIUM_EXECUTABLE_PATH || undefined,
+        executablePath,
         args: puppeteerArgs,
       },
       webVersion: "2.3000.1023204227-alpha",
@@ -293,6 +297,73 @@ export class SessionManager extends EventEmitter {
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
+
+  /**
+   * Resolves the Chromium/Chrome executable path:
+   * 1. If env.CHROMIUM_EXECUTABLE_PATH is explicitly set and exists on disk, use it.
+   * 2. If it is set but does NOT exist on disk, log a clear warning and auto-detect.
+   * 3. Auto-detect common browser installation paths by OS (Windows, Linux, macOS).
+   * 4. If none found, return undefined so Puppeteer can use its bundled revision.
+   */
+  private resolveChromiumExecutablePath(): string | undefined {
+    const configured = env.CHROMIUM_EXECUTABLE_PATH?.trim();
+
+    if (configured) {
+      if (fs.existsSync(configured)) {
+        logger.info("[Session] Using configured Chromium executable", { path: configured });
+        return configured;
+      }
+      logger.warn(
+        `[Session] Configured CHROMIUM_EXECUTABLE_PATH "${configured}" was not found on this system (${process.platform}). Falling back to auto-detection...`
+      );
+    }
+
+    const candidates: string[] = [];
+
+    if (process.platform === "win32") {
+      const localAppData = process.env.LOCALAPPDATA || "";
+      const programFiles = process.env["ProgramFiles"] || "C:\\Program Files";
+      const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+
+      candidates.push(
+        path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+        path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+        localAppData ? path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe") : "",
+        path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+        path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+        path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+        path.join(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe")
+      );
+    } else if (process.platform === "darwin") {
+      candidates.push(
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+      );
+    } else {
+      // Linux / Docker container
+      candidates.push(
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/snap/bin/chromium"
+      );
+    }
+
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        logger.info("[Session] Auto-detected browser executable", { path: candidate });
+        return candidate;
+      }
+    }
+
+    logger.warn(
+      "[Session] No system browser found in standard locations. Leaving executablePath undefined for Puppeteer."
+    );
+    return undefined;
+  }
 
   /**
    * Chromium menolak start dengan `Code: 21` kalau `SingletonLock` di profile

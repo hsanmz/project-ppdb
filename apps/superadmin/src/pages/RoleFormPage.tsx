@@ -8,10 +8,7 @@ import { ACCESS_LEVELS } from '../types'
 import type { AccessLevel } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button } from "@/components/ui"
-import { Input } from "@/components/ui"
-import { Label } from "@/components/ui"
-import { Card, CardContent } from "@/components/ui"
+import { Button, Input, Label, Card, CardContent, Switch } from "@/components/ui"
 
 export default function RoleFormPage() {
   const navigate = useNavigate()
@@ -170,13 +167,18 @@ export default function RoleFormPage() {
           </CardContent>
         </Card>
 
-        {/* Permission Editor */}
+        {/* Permission Editor - Module Login Access */}
         <Card className="mt-4">
           <CardContent className="space-y-4 p-6 md:p-8">
             <div className="flex items-center gap-2">
-              <div className="h-4 w-1 rounded-full bg-warning" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Module Permissions</span>
+              <div className="h-4 w-1 rounded-full bg-primary" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Hak Akses Modul (Izin Login)
+              </span>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Tentukan modul/aplikasi mana saja yang dapat dimasuki oleh pengguna dengan role ini.
+            </p>
 
             {form.is_superadmin ? (
               <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
@@ -192,64 +194,55 @@ export default function RoleFormPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {(() => {
-                  const DISPLAY_MODULES = [
-                    { id: 'ppdb', label: 'PPDB (Pendaftar, Pembayaran, Seleksi, Notifikasi, Dashboard)', keys: ['ppdb'] },
-                    { id: 'companyprofile', label: 'Company Profile (Konten Website)', keys: ['companyprofile'] },
-                  ]
-
-                  return DISPLAY_MODULES.map(({ id, label, keys }) => {
-                    // Anggap level access dari module adalah level dari key pertama
-                    const currentLevel = permissions[keys[0]] || 'none'
-                    return (
-                      <div key={id} className="rounded-xl border border-border bg-card p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className="text-sm font-semibold text-foreground">{label}</span>
-                          {currentLevel !== 'none' && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto px-2 py-0.5 text-[11px] font-normal text-destructive hover:text-destructive"
-                              onClick={() => {
-                                setPermissions(prev => {
-                                  const next = { ...prev }
-                                  keys.forEach(k => delete next[k])
-                                  return next
-                                })
-                              }}
-                            >
-                              Reset ke None
-                            </Button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {ACCESS_LEVELS.map(level => (
-                            <Button
-                              key={level.value}
-                              type="button"
-                              size="sm"
-                              variant={currentLevel === level.value ? 'default' : 'outline'}
-                              onClick={() => {
-                                setPermissions(prev => {
-                                  const next = { ...prev }
-                                  keys.forEach(k => { next[k] = level.value as AccessLevel })
-                                  return next
-                                })
-                              }}
-                              title={level.description}
-                            >
-                              {level.label}
-                            </Button>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-[11px] text-muted-foreground">
-                          {ACCESS_LEVELS.find(l => l.value === currentLevel)?.description}
+                {[
+                  {
+                    id: 'ppdb',
+                    label: 'PPDB (Penerimaan Peserta Didik Baru)',
+                    description: 'Mengizinkan pengguna dengan role ini untuk login ke portal admin PPDB.',
+                  },
+                  {
+                    id: 'companyprofile',
+                    label: 'Company Profile (Website Pesantren)',
+                    description: 'Mengizinkan pengguna dengan role ini untuk login ke CMS Company Profile.',
+                  },
+                ].map(({ id, label, description }) => {
+                  const isAllowed = Boolean(permissions[id] && permissions[id] !== 'none')
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+                    >
+                      <div className="space-y-0.5 pr-4">
+                        <Label htmlFor={`switch-${id}`} className="text-sm font-semibold text-foreground cursor-pointer">
+                          {label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {description}
                         </p>
                       </div>
-                    )
-                  })
-                })()}
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {isAllowed ? 'Diizinkan' : 'Dilarang'}
+                        </span>
+                        <Switch
+                          id={`switch-${id}`}
+                          checked={isAllowed}
+                          onCheckedChange={(checked) => {
+                            setPermissions((prev) => {
+                              const next = { ...prev }
+                              if (checked) {
+                                next[id] = 'access' as AccessLevel
+                              } else {
+                                delete next[id]
+                              }
+                              return next
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </CardContent>

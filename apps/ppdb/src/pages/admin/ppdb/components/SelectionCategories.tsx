@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '@/api/client'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { Badge, Card, CardContent } from "@/components/ui"
 import { Button } from "@/components/ui"
 import { Input } from "@/components/ui"
@@ -15,7 +15,7 @@ import type { SelectionCategory } from './types'
 export default function SelectionCategories() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('rubrik')
 
   const [deleteCriteriaId, setDeleteCriteriaId] = useState<string | null>(null)
   const [criteriaModal, setCriteriaModal] = useState<{

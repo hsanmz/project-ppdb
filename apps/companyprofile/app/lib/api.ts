@@ -33,6 +33,7 @@ export interface AuthMe {
   role_id: string; role_name: string; is_superadmin: boolean
   permissions: Record<string, string>
   page_permissions: string[]
+  crud_permissions?: string[]
   created_at?: string
   last_login_at?: string
 }
@@ -51,6 +52,7 @@ function buildMockUser(username = 'admin'): AuthMe {
     is_superadmin: true,
     permissions: { companyprofile: 'crud', ppdb: 'crud' },
     page_permissions: [],
+    crud_permissions: ['news', 'programs', 'facilities', 'staff', 'achievements', 'gallery', 'testimonials', 'social', 'contact', 'settings'],
   }
 }
 

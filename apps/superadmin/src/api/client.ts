@@ -1,4 +1,4 @@
-import type { AuthUser, LoginResponse, User, Role, Module, UserPagePermissions } from '../types'
+import type { AuthUser, LoginResponse, User, Role, Module, UserPagePermissions, PagePermissionItem } from '../types'
 
 export const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '')
 
@@ -381,10 +381,14 @@ export async function getUserPagePermissions(userId: string): Promise<UserPagePe
   return apiFetch(`/users/${userId}/page-permissions`)
 }
 
-export async function updateUserPagePermissions(id: string, page_ids: string[]) {
+export async function updateUserPagePermissions(
+  id: string,
+  payload: string[] | { page_ids?: string[]; permissions?: PagePermissionItem[] }
+) {
+  const body = Array.isArray(payload) ? { page_ids: payload } : payload
   return await apiFetch(`/users/${id}/page-permissions`, {
     method: 'PUT',
-    body: JSON.stringify({ page_ids }),
+    body: JSON.stringify(body),
   })
 }
 
