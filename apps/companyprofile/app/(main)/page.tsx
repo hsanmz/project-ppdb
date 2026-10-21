@@ -5,10 +5,10 @@ import AboutPreview from '@/app/components/sections/AboutPreview'
 import ProgramsPreview from '@/app/components/sections/ProgramsPreview'
 import FacilitiesPreview from '@/app/components/sections/FacilitiesPreview'
 import StatsSection from '@/app/components/sections/StatsSection'
-import { getTestimonials, getPrograms, getFacilities, getSettings } from '@/app/lib/api'
+import { getHeroSlides, getTestimonials, getPrograms, getFacilities, getSettings } from '@/app/lib/api'
 import { getTestimonialsDummyFallback } from '@/app/lib/dummyTestimonials'
 import { fetchActivePpdbWave } from '@/app/lib/ppdb'
-import type { Testimonial, Program, Facility, SettingsItem } from '@/app/lib/types'
+import type { HeroSlide, Program, Facility, SettingsItem } from '@/app/lib/types'
 
 const TestimonialsCarousel = dynamic(() => import('@/app/components/sections/TestimonialsCarousel'))
 const CTASection = dynamic(() => import('@/app/components/sections/CTASection'))
@@ -39,8 +39,9 @@ export const metadata: Metadata = {
 }
 
 export default async function Home() {
-  const [wave, rawTestimonials, programs, facilities, settings] = await Promise.all([
+  const [wave, heroSlides, rawTestimonials, programs, facilities, settings] = await Promise.all([
     fetchActivePpdbWave().catch(() => null),
+    getHeroSlides().catch(() => [] as HeroSlide[]),
     getTestimonials().catch(() => null),
     getPrograms().catch(() => [] as Program[]),
     getFacilities().catch(() => [] as Facility[]),
@@ -57,7 +58,7 @@ export default async function Home() {
 
   return (
     <>
-      <HeroSection wave={wave} />
+      <HeroSection wave={wave} slides={heroSlides} />
       <div className="verse-divider" />
       <AboutPreview settings={settingsMap} />
       <StatsSection settings={settingsMap} />

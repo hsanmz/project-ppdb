@@ -61,6 +61,7 @@ PAGES = {
         ("tiu-settings", "Pengaturan TIU", "Timer", 70),
     ],
     "companyprofile": [
+        ("hero", "Hero Beranda", "Home", 5),
         ("news", "Berita", "Newspaper", 10),
         ("programs", "Program", "BookOpen", 20),
         ("facilities", "Fasilitas", "Building2", 30),
@@ -71,6 +72,10 @@ PAGES = {
         ("social", "Tautan Sosial", "LinkIcon", 80),
         ("contact", "Info Kontak", "Phone", 90),
         ("settings", "Pengaturan", "Settings", 100),
+        ("ppdb-jalur", "Jalur PPDB", "Route", 110),
+        ("ppdb-pillars", "Pilar Kurikulum", "LayoutGrid", 120),
+        ("ppdb-steps", "Alur PPDB", "ListOrdered", 130),
+        ("ppdb-copy", "Teks & CTA PPDB", "Type", 140),
     ],
 }
 

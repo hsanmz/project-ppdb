@@ -51,7 +51,17 @@ TABLES = {
     "gallery": "gallery_items",
     "social-links": "social_links",
     "testimonials": "testimonials",
+    "hero-slides": "hero_slides",
+    "ppdb-jalur": "ppdb_jalur_cards",
+    "ppdb-pillars": "ppdb_pillars",
+    "ppdb-steps": "ppdb_steps",
+    "ppdb-copy": "ppdb_page_copy",
 }
+
+# Entitas singleton: hanya boleh ada satu baris. Halaman publik `/ppdb`
+# membacanya sebagai satu sumber teks (judul seksi + banner CTA); baris kedua
+# membuat "yang mana yang tampil" jadi tidak deterministik.
+SINGLETON_ENTITIES: frozenset[str] = frozenset({"ppdb-copy"})
 
 PUBLIC_SETTINGS_KEYS = {
     "favicon",
@@ -639,10 +649,19 @@ def cp_contact_update(
 def cp_entity_list(entity: str, skip: int = 0, limit: int = 100):
     reject_reserved(entity)
     table = get_table(entity)
+    # Urutan default tiap entitas. Hanya entitas yang PUNYA kolom `order`
+    # (`hero_slides`, `programs`, `testimonials`) bisa diurutkan di SQL.
+    # Entitas PPDB dan `staff` menyimpan urutan di dalam JSON `content`
+    # (`content.order`) karena tabelnya tidak punya kolom tersebut — urutan
+    # entitas itu diurus di sisi klien, bukan di sini.
     order = (
         "date.desc"
         if entity == "news"
-        else ("year.desc" if entity == "achievements" else None)
+        else "year.desc"
+        if entity == "achievements"
+        else "order.asc"
+        if entity in ("hero-slides", "programs", "testimonials")
+        else None
     )
     items = list_all(table, order=order, skip=skip, limit=limit)
 
@@ -689,6 +708,11 @@ async def cp_entity_create(
 ):
     reject_reserved(entity)
     table = get_table(entity)
+    if entity in SINGLETON_ENTITIES and await asyncio.to_thread(get_first, table):
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{entity}' already has a row. Edit the existing row instead.",
+        )
     body = await _read_json(request)
     payload = sanitize_or_422(entity, body, partial=False)
     assert_slug_available(entity, str(payload.get("slug", "")))

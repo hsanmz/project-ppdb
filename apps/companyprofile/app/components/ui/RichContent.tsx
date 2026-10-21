@@ -1,9 +1,19 @@
-import DOMPurify from 'dompurify'
-
 interface Props {
   content: string
 }
 
+/**
+ * Renders a plain-text article body as simple, self-generated HTML.
+ *
+ * Catatan keamanan: SETIAP potongan yang berasal dari `content` melewati
+ * `escapeHtml` di bawah, dan satu-satunya tag pada keluaran adalah tag statis
+ * yang dibangun di file ini. Jadi hasilnya sudah aman untuk
+ * `dangerouslySetInnerHTML` dan tidak perlu disanitasi lagi.
+ *
+ * Sengaja TIDAK memakai DOMPurify: `dompurify` membutuhkan DOM dan
+ * `sanitize`-nya bukan sebuah fungsi saat SSR, sehingga render server halaman
+ * detail berita gagal dan Next turun ke client rendering.
+ */
 export default function RichContent({ content }: Props) {
   const html = (content || '')
     .split('\n\n')
@@ -46,7 +56,7 @@ export default function RichContent({ content }: Props) {
   return (
     <div
       className="rich-content"
-      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 }

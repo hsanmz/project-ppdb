@@ -88,7 +88,6 @@ export default function InteractiveImageAccordion({
       </div>
 
       <div key={active.id} className="animate-fade-up-in mt-6 text-center max-w-3xl mx-auto px-2">
-        <div className="verse-strip w-16 mx-auto mb-5" />
         <h3 className="font-[var(--font-display)] text-2xl sm:text-3xl font-bold text-[var(--text)]">
           {active.title}
         </h3>

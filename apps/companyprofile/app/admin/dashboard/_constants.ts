@@ -1,11 +1,13 @@
 import {
   Newspaper, GraduationCap, Building2, Users, Trophy,
   Image as ImageIcon, MessageSquare, Link as LinkIcon, Phone, Settings,
+  Route, LayoutGrid, ListOrdered, Type, Home,
 } from 'lucide-react'
 import * as api from '@/app/lib/api'
-import type { TabDef } from './_types'
+import type { RowRecord, TabDef } from './_types'
 
 export const TABS: TabDef[] = [
+  { key: 'hero', label: 'Hero Beranda', endpoint: '/hero-slides', fetch: api.getHeroSlides, icon: Home },
   { key: 'news', label: 'Berita', endpoint: '/news', fetch: api.getNews, icon: Newspaper },
   { key: 'programs', label: 'Program', endpoint: '/programs', fetch: api.getPrograms, icon: GraduationCap },
   { key: 'facilities', label: 'Fasilitas', endpoint: '/facilities', fetch: api.getFacilities, icon: Building2 },
@@ -16,10 +18,24 @@ export const TABS: TabDef[] = [
   { key: 'social', label: 'Tautan Sosial', endpoint: '/social-links', fetch: api.getSocialLinks, icon: LinkIcon },
   { key: 'contact', label: 'Info Kontak', endpoint: '/contact-info', fetch: api.getContactInfo, icon: Phone },
   { key: 'settings', label: 'Pengaturan', endpoint: '/settings', fetch: api.getAdminSettings, icon: Settings },
+  { key: 'ppdb-jalur', label: 'Jalur PPDB', endpoint: '/ppdb-jalur', fetch: api.getPpdbJalur, icon: Route },
+  { key: 'ppdb-pillars', label: 'Pilar Kurikulum', endpoint: '/ppdb-pillars', fetch: api.getPpdbPillars, icon: LayoutGrid },
+  { key: 'ppdb-steps', label: 'Alur PPDB', endpoint: '/ppdb-steps', fetch: api.getPpdbSteps, icon: ListOrdered },
+  { key: 'ppdb-copy', label: 'Teks & CTA PPDB', endpoint: '/ppdb-copy', fetch: api.getPpdbCopy, icon: Type },
 ]
 
 export const HAS_CONTENT: string[] = [
-  'news', 'programs', 'facilities', 'staff', 'achievements', 'gallery', 'testimonials',
+  'hero', 'news', 'programs', 'facilities', 'staff', 'achievements', 'gallery', 'testimonials',
+  'ppdb-jalur', 'ppdb-pillars', 'ppdb-steps', 'ppdb-copy',
+]
+
+/**
+ * Tab tanpa unggahan gambar. Form menyembunyikan seksi "Gambar" dan tidak
+ * mengirim field `image` — kolomnya memang tidak ada di entitas PPDB, dan
+ * backend menolak key yang tidak di-whitelist (422).
+ */
+export const NO_IMAGE_TABS: string[] = [
+  'ppdb-jalur', 'ppdb-pillars', 'ppdb-steps', 'ppdb-copy',
 ]
 
 /**
@@ -47,57 +63,184 @@ export function maxLengthFor(field: string): number {
   return FIELD_MAX_LENGTHS[field] ?? 255
 }
 
-export const TABLE_COLS: Record<string, { label: string; accessor: (item: import('./_types').RowRecord) => string | undefined }[]> = {
+/**
+ * Di mana nilai "Urutan Tampilan" disimpan untuk tiap entitas.
+ *
+ * - `column` : kolom `order` di tabel DB (`hero_slides`, `programs`,
+ *              `testimonials`). Backend mengurutkan list endpoint dengan
+ *              `ORDER BY order ASC`, jadi urutannya sudah benar sejak API.
+ * - `content`: di dalam JSON `content` (`content.order`). Tabel entitas ini
+ *              tidak punya kolom `order`, jadi backend tidak bisa mengurutkan
+ *              di SQL — urutannya diurus di sisi klien.
+ */
+export const ORDER_SOURCE: Record<string, 'column' | 'content'> = {
+  hero: 'column',
+  programs: 'column',
+  testimonials: 'column',
+  staff: 'content',
+  'ppdb-jalur': 'content',
+  'ppdb-pillars': 'content',
+  'ppdb-steps': 'content',
+}
+
+function toOrderNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+/**
+ * Urutkan baris tabel dashboard mengikuti sumber urutan entitas.
+ *
+ * Untuk entitas ber-`column`-backend sudah mengurutkan, pengurutan di sini
+ * idempoten. Untuk entitas ber-`content` inilah satu-satunya tempat urutan
+ * diterapkan, supaya baris di tabel admin urutannya sama dengan urutan di
+ * situs publik (yang juga mengurutkan `content.order`).
+ *
+ * Baris tanpa nilai urutan tetap tampil, di urutan paling akhir, dan pengurutan
+ * bersifat stabil (baris dengan nilai urutan sama tidak tertukar).
+ */
+export function sortRowsByOrder(tabKey: string, rows: RowRecord[]): RowRecord[] {
+  const source = ORDER_SOURCE[tabKey]
+  if (!source) return rows
+  return rows
+    .map((row, index) => ({
+      row,
+      index,
+      order: toOrderNumber(
+        source === 'column' ? row.order : row.content?.order,
+      ),
+    }))
+    .sort((a, b) => {
+      const ao = a.order ?? Number.MAX_SAFE_INTEGER
+      const bo = b.order ?? Number.MAX_SAFE_INTEGER
+      if (ao !== bo) return ao - bo
+      return a.index - b.index
+    })
+    .map((entry) => entry.row)
+}
+
+/**
+ * Metadata kolom tabel dashboard.
+ *
+ * `variant` hanya mengatur cara render:
+ * - `title`    : sel utama (dapat thumbnail + baris judul tebal)
+ * - `subtitle` : teks kecil di bawah judul, digabung ke sel title (tidak jadi kolom sendiri)
+ * - `badge`    : chip/pil kecil (kategori, peran, tahun)
+ * - `date`     : tanggal terformat, rata kanan secara visual
+ * - `text`     : teks biasa (default)
+ */
+export interface TableColumn {
+  label: string
+  /**
+   * Nilai kolom bisa berasal dari JSON `content` yang bertipe `unknown`
+   * (teks, angka, atau kosong). Renderer tabel menyeragamkannya lewat
+   * koersi teks, jadi accessor tidak perlu memaksa `String(...)` sendiri.
+   */
+  accessor: (item: import('./_types').RowRecord) => unknown
+  variant?: 'title' | 'subtitle' | 'badge' | 'date' | 'text'
+  tone?: 'emerald' | 'gold'
+}
+
+export const TABLE_COLS: Record<string, TableColumn[]> = {
+  hero: [
+    { label: 'Judul Slide', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Label Kecil', accessor: (i) => i.content?.label, variant: 'text' },
+    { label: 'Urutan', accessor: (i) => (i.order != null ? String(i.order) : ''), variant: 'badge' },
+  ],
   news: [
-    { label: 'Judul', accessor: (i) => i.content?.title || '' },
-    { label: 'Slug', accessor: (i) => i.slug },
-    { label: 'Kategori', accessor: (i) => i.category },
-    { label: 'Tanggal', accessor: (i) => i.date },
+    { label: 'Judul', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Slug', accessor: (i) => i.slug, variant: 'subtitle' },
+    { label: 'Kategori', accessor: (i) => i.category, variant: 'badge' },
+    { label: 'Tanggal', accessor: (i) => i.date, variant: 'date' },
   ],
   programs: [
-    { label: 'Judul', accessor: (i) => i.content?.title || '' },
-    { label: 'Slug', accessor: (i) => i.slug },
+    { label: 'Judul', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Slug', accessor: (i) => i.slug, variant: 'subtitle' },
+    { label: 'Urutan', accessor: (i) => (i.order != null ? String(i.order) : ''), variant: 'badge' },
   ],
   facilities: [
-    { label: 'Nama', accessor: (i) => i.content?.name || '' },
-    { label: 'Kategori', accessor: (i) => i.category },
+    { label: 'Nama', accessor: (i) => i.content?.name || '', variant: 'title' },
+    { label: 'Kategori', accessor: (i) => i.category, variant: 'badge' },
   ],
   staff: [
-    { label: 'Nama', accessor: (i) => i.content?.name || '' },
-    { label: 'Peran', accessor: (i) => i.role },
+    { label: 'Nama', accessor: (i) => i.content?.name || '', variant: 'title' },
+    { label: 'Peran', accessor: (i) => i.role, variant: 'badge' },
   ],
   achievements: [
-    { label: 'Judul', accessor: (i) => i.content?.title || '' },
-    { label: 'Tahun', accessor: (i) => String(i.year) },
+    { label: 'Judul', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Tahun', accessor: (i) => String(i.year), variant: 'badge', tone: 'gold' },
   ],
   gallery: [
-    { label: 'Judul', accessor: (i) => i.content?.title || '' },
-    { label: 'Kategori', accessor: (i) => i.category },
+    { label: 'Judul', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Kategori', accessor: (i) => i.category, variant: 'badge' },
   ],
   testimonials: [
-    { label: 'Nama', accessor: (i) => i.name },
-    { label: 'Anak', accessor: (i) => i.child },
+    { label: 'Nama', accessor: (i) => i.name, variant: 'title' },
+    { label: 'Anak', accessor: (i) => i.child, variant: 'text' },
   ],
   social: [
-    { label: 'Label', accessor: (i) => i.label },
-    { label: 'URL', accessor: (i) => i.href },
+    { label: 'Label', accessor: (i) => i.label, variant: 'title' },
+    { label: 'URL', accessor: (i) => i.href, variant: 'text' },
   ],
-  contact: [
-    { label: 'Telepon', accessor: (i) => i.phone_primary || '' },
-    { label: 'Email', accessor: (i) => i.email_primary || '' },
-    { label: 'WhatsApp', accessor: (i) => i.whatsapp || '' },
+  'ppdb-jalur': [
+    { label: 'Judul Jalur', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Label', accessor: (i) => i.content?.kicker, variant: 'text' },
+    { label: 'Urutan', accessor: (i) => (i.content?.order != null ? String(i.content.order) : ''), variant: 'badge' },
+  ],
+  'ppdb-pillars': [
+    { label: 'Judul Pilar', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Urutan', accessor: (i) => (i.content?.order != null ? String(i.content.order) : ''), variant: 'badge' },
+  ],
+  'ppdb-steps': [
+    { label: 'Judul Langkah', accessor: (i) => i.content?.title || '', variant: 'title' },
+    { label: 'Urutan', accessor: (i) => (i.content?.order != null ? String(i.content.order) : ''), variant: 'badge' },
+  ],
+  'ppdb-copy': [
+    { label: 'Judul Seksi Jalur', accessor: (i) => i.content?.jalur_title || '', variant: 'title' },
+    { label: 'Judul Banner CTA', accessor: (i) => i.content?.cta_title, variant: 'text' },
   ],
 }
 
-export const FORM_FIELDS: Record<string, { name: string; label: string; type: 'text' | 'textarea' | 'number' | 'date' }[]> = {
+/**
+ * Kolom editor Info Kontak (tab `contact`).
+ *
+ * Tab `contact` TIDAK memakai modal CRUD — formnya ada di `ContactEditor.tsx`
+ * dan disimpan lewat `api.updateContactInfo()`. Definisi kolom diletakkan di
+ * sini supaya menjadi satu-satunya sumber kebenaran; sebelumnya duplikat di
+ * `FORM_FIELDS.contact` yang tidak pernah tampil (modal tidak pernah dibuka
+ * untuk tab ini, jadi datanya mati).
+ */
+export const CONTACT_FIELDS: { key: string; label: string; type: 'text' | 'textarea' }[] = [
+  { key: 'phone_primary', label: 'Telepon Utama', type: 'text' },
+  { key: 'phone_secondary', label: 'Telepon Kedua', type: 'text' },
+  { key: 'whatsapp', label: 'WhatsApp', type: 'text' },
+  { key: 'email_primary', label: 'Email Utama', type: 'text' },
+  { key: 'email_admission', label: 'Email Penerimaan (PPDB)', type: 'text' },
+  { key: 'office_hours', label: 'Jam Operasional Kantor', type: 'text' },
+  { key: 'address', label: 'Alamat Lengkap', type: 'textarea' },
+  { key: 'maps_embed', label: 'Kode Embed Google Maps (iframe/URL)', type: 'textarea' },
+]
+
+export const FORM_FIELDS: Record<string, { name: string; label: string; type: 'text' | 'textarea' | 'number' | 'date'; required?: boolean }[]> = {
+  hero: [
+    { name: 'order', label: 'Urutan Tampilan', type: 'number' },
+  ],
   news: [
     { name: 'slug', label: 'Slug', type: 'text' },
     { name: 'category', label: 'Kategori', type: 'text' },
-    { name: 'date', label: 'Tanggal', type: 'date' },
+    // Tanggal wajib diisi di form: tanggal kosong membuat halaman publik
+    // menampilkan tanggal kosong/"Invalid Date". Backend sendiri tidak
+    // mewajibkannya, jadi validasi ini murni di sisi form.
+    { name: 'date', label: 'Tanggal', type: 'date', required: true },
   ],
   programs: [
     { name: 'slug', label: 'Slug', type: 'text' },
     { name: 'icon', label: 'Ikon', type: 'text' },
+    { name: 'order', label: 'Urutan Tampilan', type: 'number' },
   ],
   facilities: [{ name: 'category', label: 'Kategori', type: 'text' }],
   staff: [{ name: 'role', label: 'Peran (leader / teacher)', type: 'text' }],
@@ -113,19 +256,24 @@ export const FORM_FIELDS: Record<string, { name: string; label: string; type: 't
     { name: 'href', label: 'URL', type: 'text' },
     { name: 'path', label: 'SVG Path', type: 'textarea' },
   ],
-  contact: [
-    { name: 'phone_primary', label: 'Telepon', type: 'text' },
-    { name: 'phone_secondary', label: 'Telepon Kedua', type: 'text' },
-    { name: 'whatsapp', label: 'WhatsApp', type: 'text' },
-    { name: 'email_primary', label: 'Email', type: 'text' },
-    { name: 'email_admission', label: 'Email Penerimaan', type: 'text' },
-    { name: 'address', label: 'Alamat', type: 'textarea' },
-    { name: 'office_hours', label: 'Jam Kantor', type: 'text' },
-    { name: 'maps_embed', label: 'Maps Embed (Iframe/URL)', type: 'textarea' },
+  'ppdb-jalur': [
+    { name: 'icon', label: 'Ikon (Award, GraduationCap, Target, …)', type: 'text' },
   ],
+  'ppdb-pillars': [
+    { name: 'icon', label: 'Ikon (BookOpen, Laptop, Globe, …)', type: 'text' },
+  ],
+  'ppdb-steps': [],
+  'ppdb-copy': [],
 }
 
 export const CONTENT_FIELDS: Record<string, { name: string; label: string; type: 'text' | 'textarea' | 'list' | 'number' | 'parent' }[]> = {
+  hero: [
+    { name: 'label', label: 'Label Kecil (badge)', type: 'text' },
+    { name: 'title', label: 'Judul Slide', type: 'textarea' },
+    { name: 'subtitle', label: 'Subjudul', type: 'textarea' },
+    { name: 'button_label', label: 'Label Tombol', type: 'text' },
+    { name: 'button_href', label: 'Tautan Tombol', type: 'text' },
+  ],
   news: [
     { name: 'title', label: 'Judul Berita', type: 'text' },
     { name: 'excerpt', label: 'Ringkasan', type: 'textarea' },
@@ -165,6 +313,47 @@ export const CONTENT_FIELDS: Record<string, { name: string; label: string; type:
     { name: 'desc', label: 'Deskripsi Gambar', type: 'textarea' }
   ],
   testimonials: [{ name: 'quote', label: 'Kutipan Testimoni', type: 'textarea' }],
+  'ppdb-jalur': [
+    { name: 'title', label: 'Judul Jalur', type: 'text' },
+    { name: 'kicker', label: 'Label Kecil (badge)', type: 'text' },
+    { name: 'desc', label: 'Deskripsi', type: 'textarea' },
+    { name: 'items', label: 'Poin Keunggulan (1 per baris)', type: 'list' },
+    { name: 'accent', label: 'Warna Aksen (emerald/amber/sky/violet/rose/teal)', type: 'text' },
+    { name: 'cta_label', label: 'Label Tombol', type: 'text' },
+    { name: 'cta_href', label: 'Tautan Tombol', type: 'text' },
+    { name: 'order', label: 'Urutan Tampilan', type: 'number' },
+  ],
+  'ppdb-pillars': [
+    { name: 'title', label: 'Judul Pilar', type: 'text' },
+    { name: 'desc', label: 'Deskripsi', type: 'textarea' },
+    { name: 'order', label: 'Urutan Tampilan', type: 'number' },
+  ],
+  'ppdb-steps': [
+    { name: 'title', label: 'Judul Langkah', type: 'text' },
+    { name: 'desc', label: 'Deskripsi', type: 'textarea' },
+    { name: 'order', label: 'Urutan Tampilan', type: 'number' },
+  ],
+  'ppdb-copy': [
+    { name: 'hero_title', label: 'Judul Hero (Enter = baris baru; baris terakhir berwarna aksen)', type: 'textarea' },
+    { name: 'hero_desc', label: 'Deskripsi Hero', type: 'textarea' },
+    { name: 'hero_cta_label', label: 'Label Tombol Hero', type: 'text' },
+    { name: 'hero_cta_href', label: 'Tautan Tombol Hero', type: 'text' },
+    { name: 'hero_register_label', label: 'Label Tombol Header', type: 'text' },
+    { name: 'hero_register_href', label: 'Tautan Tombol Header', type: 'text' },
+    { name: 'hero_proof', label: 'Poin Unggulan Hero (pisahkan dengan |)', type: 'text' },
+    { name: 'jalur_title', label: 'Judul Seksi Jalur', type: 'text' },
+    { name: 'jalur_desc', label: 'Deskripsi Seksi Jalur', type: 'textarea' },
+    { name: 'kurikulum_title', label: 'Judul Seksi Kurikulum', type: 'text' },
+    { name: 'kurikulum_desc', label: 'Deskripsi Seksi Kurikulum', type: 'textarea' },
+    { name: 'alur_kicker', label: 'Label Kecil Seksi Alur', type: 'text' },
+    { name: 'alur_title', label: 'Judul Seksi Alur', type: 'text' },
+    { name: 'cta_title', label: 'Judul Banner CTA', type: 'text' },
+    { name: 'cta_desc', label: 'Deskripsi Banner CTA', type: 'textarea' },
+    { name: 'cta_primary_label', label: 'Label Tombol Utama', type: 'text' },
+    { name: 'cta_primary_href', label: 'Tautan Tombol Utama', type: 'text' },
+    { name: 'cta_secondary_label', label: 'Label Tombol Kedua', type: 'text' },
+    { name: 'cta_secondary_href', label: 'Tautan Tombol Kedua', type: 'text' },
+  ],
 }
 
 export const SOCIAL_PRESETS: { label: string; path: string }[] = [

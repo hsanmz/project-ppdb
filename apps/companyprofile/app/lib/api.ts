@@ -5,7 +5,12 @@ import type {
   ContactInfo,
   Facility,
   GalleryItem,
+  HeroSlide,
   NewsArticle,
+  PpdbJalurCard,
+  PpdbPageCopy,
+  PpdbPillar,
+  PpdbStep,
   Program,
   SettingsItem,
   SocialLink,
@@ -349,6 +354,36 @@ export async function getSocialLinks(): Promise<SocialLink[]> {
   return fetchApi<JsonValue[]>('/social-links').then(
     (items) => items as unknown as SocialLink[]
   )
+}
+
+// ── Konten landing PPDB (tab Jalur/Pilar/Alur/Teks PPDB di dashboard) ──
+
+export async function getPpdbJalur(): Promise<PpdbJalurCard[]> {
+  const items = await fetchApi<JsonValue[]>('/ppdb-jalur')
+  return items.map((item) => mapContent(item) as unknown as PpdbJalurCard)
+}
+
+export async function getPpdbPillars(): Promise<PpdbPillar[]> {
+  const items = await fetchApi<JsonValue[]>('/ppdb-pillars')
+  return items.map((item) => mapContent(item) as unknown as PpdbPillar)
+}
+
+export async function getPpdbSteps(): Promise<PpdbStep[]> {
+  const items = await fetchApi<JsonValue[]>('/ppdb-steps')
+  return items.map((item) => mapContent(item) as unknown as PpdbStep)
+}
+
+export async function getPpdbCopy(): Promise<PpdbPageCopy | null> {
+  const items = await fetchApi<JsonValue[]>('/ppdb-copy')
+  const row = items[0]
+  return row ? (mapContent(row) as unknown as PpdbPageCopy) : null
+}
+
+// ── Hero beranda (tab Hero Beranda di dashboard) ──
+
+export async function getHeroSlides(): Promise<HeroSlide[]> {
+  const items = await fetchApi<JsonValue[]>('/hero-slides')
+  return items.map((item) => mapContent(item) as unknown as HeroSlide)
 }
 
 // Paginated variant used by the admin dashboard list views. Each page holds up

@@ -3,11 +3,11 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { MapPin, Phone, Mail, ArrowUpRight } from 'lucide-react'
-import VerseStrip from '../ui/VerseStrip'
 import ShapeDividerDiagonal from '../ui/ShapeDividerDiagonal'
 import { socialLinks as staticSocialLinks } from '@/app/data/social'
 import { getContactInfo, getSocialLinks } from '@/app/lib/api'
-import { useProgramLinks } from '@/app/hooks/useProgramLinks'
+import { programMenuLinks } from '@/app/lib/programs'
+import type { Program } from '@/app/lib/types'
 import { useBrand } from '@repo/ui'
 
 interface SocialItem {
@@ -28,9 +28,8 @@ const FALLBACK_CONTACT: ContactState = {
   email: 'info@ptdarrahman.sch.id',
 }
 
-export default function Footer() {
+export default function Footer({ programs = [] }: { programs?: Program[] }) {
   const { logoUrl } = useBrand(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-  const { hrefFor } = useProgramLinks()
   const [socials, setSocials] = useState<SocialItem[]>(staticSocialLinks)
   const [contact, setContact] = useState<ContactState>(FALLBACK_CONTACT)
 
@@ -66,8 +65,6 @@ export default function Footer() {
       <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-[0.03]"
         style={{ background: 'radial-gradient(circle, var(--color-gold) 0%, transparent 70%)' }}
       />
-
-      <VerseStrip className="mb-16" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
         <div className="grid sm:grid-cols-2 lg:grid-cols-12 gap-8 sm:gap-10 mb-10 sm:mb-12">
@@ -144,13 +141,7 @@ export default function Footer() {
               {'Program'}
             </h4>
             <ul className="space-y-3">
-              {[
-                { href: hrefFor('tahfidz'), label: 'Tahfidz Al-Quran' },
-                { href: hrefFor('digital'), label: 'Teknologi Digital' },
-                { href: hrefFor('bilingual'), label: 'Program Bilingual' },
-                { href: hrefFor('leadership'), label: 'Akademi Kepemimpinan' },
-                { href: '/ppdb', label: 'Pendaftaran PPDB' },
-              ].map((l) => (
+              {[...programMenuLinks(programs), { href: '/ppdb', label: 'Pendaftaran PPDB' }].map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-1 group">
                     {l.label}

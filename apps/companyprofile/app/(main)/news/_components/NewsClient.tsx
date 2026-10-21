@@ -20,7 +20,14 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
 
   useScrollReveal(sectionRef, { start: 'top 80%', stagger: 0.08 })
 
-  const sorted = [...news].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  // Urutkan dari yang terbaru. `date` boleh kosong (tidak wajib di backend),
+  // jadi tanggal tidak valid diperlakukan sebagai 0 agar tidak menghasilkan NaN
+  // yang membuat urutan acak.
+  const sortTime = (dateStr: string) => {
+    const t = new Date(dateStr).getTime()
+    return Number.isNaN(t) ? 0 : t
+  }
+  const sorted = [...news].sort((a, b) => sortTime(b.date) - sortTime(a.date))
 
   const filtered = searchQuery
     ? sorted.filter((a) => {
@@ -34,11 +41,12 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
       })
     : sorted
 
-  const featured = searchQuery ? null : filtered[0]
-  const rest = searchQuery ? filtered : filtered.slice(1)
-
+  // Mengembalikan '' untuk tanggal kosong/tidak valid supaya UI tidak
+  // menampilkan teks "Invalid Date".
   const formatDate = (dateStr: string) => {
+    if (!dateStr) return ''
     const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return ''
     return date.toLocaleDateString('id-ID', {
       year: 'numeric', month: 'long', day: 'numeric',
     })
@@ -57,42 +65,8 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
             section berita yang berlatar ivory. */}
         <ShapeDivider fill="var(--bg-secondary)" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
-          {/* Featured Article */}
-          {featured && (() => {
-            const info = featured.content ?? {}
-            return (
-              <Link
-                href={`/news/${featured.slug}`}
-                className="group block mb-16 !no-underline"
-              >
-                <div className="grid lg:grid-cols-5 gap-8 items-center">
-                  <div className="lg:col-span-3 img-overlay rounded-xl sm:rounded-2xl shadow-md relative aspect-[4/3]">
-                    {featured.image ? <Image src={featured.image} alt={info?.title || 'Gambar berita utama'} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 60vw" priority /> : <div className="w-full h-full bg-[var(--bg-secondary)]" />}
-                  </div>
-                  <div className="lg:col-span-2">
-                    <span className="text-[10px] sm:text-xs px-2.5 py-1 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] font-semibold uppercase tracking-wider">
-                      {featured.category}
-                    </span>
-                    <h2 className="font-[var(--font-display)] text-2xl md:text-3xl font-bold text-[var(--text)] mt-4 mb-3 leading-tight group-hover:text-[var(--accent)] transition-colors">
-                      {info.title}
-                    </h2>
-                    <p className="text-sm text-[var(--text-secondary)] leading-relaxed line-clamp-3 mb-4">
-                      {info.excerpt}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {formatDate(featured.date)}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            )
-          })()}
-
-          <div className="verse-divider mb-12" />
-
            {/* Search Bar */}
-           <div className="max-w-md mb-12">
+           <div className="max-w-md mb-10">
              <input
                type="text"
                value={searchQuery}
@@ -103,16 +77,18 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
              />
            </div>
 
-          {/* Article Grid */}
-          {rest.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rest.map((article) => {
+          {/* Article Grid — semua artikel tampil sebagai kartu seragam & kompak,
+              tanpa blok "featured" besar yang dulu memakan separuh layar. */}
+          {filtered.length > 0 && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filtered.map((article) => {
               const info = article.content ?? {}
+              const dateText = formatDate(article.date)
               return (
                 <Link
                   key={article.id}
                   href={`/news/${article.slug}`}
-                  className="group glass-card rounded-2xl overflow-hidden !no-underline"
+                  className="group glass-card rounded-2xl overflow-hidden !no-underline flex flex-col"
                 >
                   <div className="aspect-[16/10] overflow-hidden relative">
                     {article.image ? (
@@ -120,22 +96,26 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
                     ) : (
                       <div className="w-full h-full bg-[var(--bg-secondary)]" />
                     )}
-                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-[var(--accent)] text-white shadow-sm">
-                      {article.category}
-                    </span>
+                    {article.category && (
+                      <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-[var(--accent)] text-white shadow-sm">
+                        {article.category}
+                      </span>
+                    )}
                   </div>
-                  <div className="p-6">
-                    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-2">
-                      <Calendar className="w-3 h-3" />
-                      {formatDate(article.date)}
-                    </div>
+                  <div className="p-5 flex flex-col flex-1">
+                    {dateText && (
+                      <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-2">
+                        <Calendar className="w-3 h-3" />
+                        {dateText}
+                      </div>
+                    )}
                     <h3 className="font-[var(--font-heading)] text-base font-bold text-[var(--text)] mb-2 leading-snug group-hover:text-[var(--accent)] transition-colors line-clamp-2">
                       {info.title}
                     </h3>
-                    <p className="text-sm text-[var(--text-secondary)] leading-relaxed line-clamp-3 mb-4">
+                    <p className="text-sm text-[var(--text-secondary)] leading-relaxed line-clamp-2 mb-4">
                       {info.excerpt}
                     </p>
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] group-hover:gap-2 transition-all">
+                    <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] group-hover:gap-2 transition-all">
                       Baca Selengkapnya
                       <ArrowRight className="w-3 h-3" />
                     </span>
@@ -144,11 +124,17 @@ export default function NewsClient({ news }: { news: NewsArticle[] }) {
               )
             })}
           </div>
-          ) : (
+          )}
+
+          {/* Empty state: hanya saat benar-benar tidak ada artikel (atau hasil
+              pencarian kosong). */}
+          {filtered.length === 0 && (
             <EmptyState
               icon={SearchX}
-              title="Artikel Tidak Ditemukan"
-              description="Tidak ada artikel yang cocok dengan pencarian Anda. Coba gunakan kata kunci lain."
+              title={searchQuery ? 'Artikel Tidak Ditemukan' : 'Belum Ada Berita'}
+              description={searchQuery
+                ? 'Tidak ada artikel yang cocok dengan pencarian Anda. Coba gunakan kata kunci lain.'
+                : 'Berita yang dipublikasikan akan tampil di sini.'}
               action={searchQuery ? (
                 <button
                   onClick={() => setSearchQuery('')}

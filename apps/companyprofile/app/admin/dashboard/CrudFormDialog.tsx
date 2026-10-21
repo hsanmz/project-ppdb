@@ -1,19 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 import Image from 'next/image'
-import { Plus, Upload, Link2, X } from 'lucide-react'
+import {
+  AlertTriangle, FileText, Image as ImageIcon, Images, ListChecks, Link2, Loader2,
+  Plus, Save, ShieldCheck, Trash2, Upload, X,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import * as api from '@/app/lib/api'
+import { cn } from '@/app/lib/utils'
+import { isFormDirty, UNSAVED_CHANGES_CONFIRM } from '@/app/lib/form-dirty'
 import { toast } from '@/app/components/ui/AdminToast'
+import { confirm } from '@/app/components/ui/AdminConfirm'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import { Textarea } from '@/app/components/ui/Textarea'
 import { Label } from '@/app/components/ui/Label'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogTitle,
 } from '@/app/components/ui/Dialog'
 import {
-  TABS, FORM_FIELDS, CONTENT_FIELDS, HAS_CONTENT, SOCIAL_PRESETS, maxLengthFor,
+  TABS, FORM_FIELDS, CONTENT_FIELDS, HAS_CONTENT, NO_IMAGE_TABS, SOCIAL_PRESETS, maxLengthFor,
 } from './_constants'
 import type { RowRecord, FormState } from './_types'
 import { errorMessage } from './_types'
@@ -28,6 +36,20 @@ interface Props {
   onSaved: () => void
 }
 
+// Gaya field disamakan untuk semua input/textarea di dialog: sudut lebih
+// lembut, fokus ring emerald, latar putih agar kontras di atas panel abu.
+const FIELD_CLASS =
+  'h-11 rounded-xl border-[var(--border)] bg-white/90 focus-visible:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/20 focus-visible:ring-offset-0'
+
+const TEXTAREA_CLASS =
+  'rounded-xl border-[var(--border)] bg-white/90 focus-visible:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/20 focus-visible:ring-offset-0'
+
+// Border error ditambahkan SETELAH `FIELD_CLASS` lewat `cn()`, karena
+// tailwind-merge membuang kelas border yang lebih awal — kalau tidak, merah
+// dari `Input`'s `error` prop ikut tertimpa border abu-abu.
+const FIELD_ERROR_CLASS =
+  'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20'
+
 export function CrudFormDialog({
   mode, activeTab, editingItem, formData, setFormData, onClose, onSaved,
 }: Props) {
@@ -37,6 +59,18 @@ export function CrudFormDialog({
   const [galleryInputMode, setGalleryInputMode] = useState<'upload' | 'url'>('upload')
   const [galleryInputValue, setGalleryInputValue] = useState('')
   const [galleryUploading, setGalleryUploading] = useState(false)
+
+  // Error validasi per kolom, dibaca dari `errorMessage` backend maupun dari
+  // pengecekan sendiri. Kuncinya adalah nama field (bukan index) supaya bisa
+  // dipetakan ke input yang tepat.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>>({})
+
+  // Snapshot nilai form saat modal dibuka. Dialog dirender kondisional, jadi
+  // setiap pembukaan = mount baru → initializer `useState` menangkap nilai
+  // awal yang benar. State (bukan ref) karena nilainya dibaca saat render.
+  const [initialFormData] = useState<FormState>(formData)
+  const isDirty = isFormDirty(formData, initialFormData)
 
   const tab = TABS.find((t) => t.key === activeTab)!
 
@@ -92,28 +126,42 @@ export function CrudFormDialog({
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {}
+      // Validasi dikumpulkan dulu (bukan berhenti di error pertama) supaya
+      // semua kolom bermasalah ditandai sekaligus, lalu fokus ke kolom
+      // pertama yang bermasalah.
+      const errors: Record<string, string> = {}
       for (const f of FORM_FIELDS[activeTab] || []) {
         const val = formData[f.name]
         if (f.type === 'number') {
           if (val === '' || val === null || val === undefined) {
-            toast('error', `${f.label} wajib diisi`)
-            setSaving(false)
-            return
+            errors[f.name] = `${f.label} wajib diisi`
+          } else {
+            payload[f.name] = Number(val)
           }
-          payload[f.name] = Number(val)
         } else {
+          if (f.required && String(val ?? '').trim() === '') {
+            errors[f.name] = `${f.label} wajib diisi`
+          }
           payload[f.name] = val
         }
       }
-      if (activeTab !== 'social') payload.image = formData.image || ''
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors)
+        const firstInvalid = Object.keys(errors)[0]
+        fieldRefs.current[firstInvalid]?.focus()
+        toast('error', 'Periksa lagi kolom yang ditandai merah.')
+        setSaving(false)
+        return
+      }
+      setFieldErrors({})
+      const showImage = activeTab !== 'social' && !NO_IMAGE_TABS.includes(activeTab)
+      if (showImage) payload.image = formData.image || ''
       if (activeTab === 'news') payload.gallery = JSON.stringify(formData.gallery ?? [])
       if (HAS_CONTENT.includes(activeTab)) {
         payload.content = JSON.stringify(buildContent())
       }
 
-      if (activeTab === 'contact') {
-        await api.updateContactInfo(payload)
-      } else if (mode === 'edit' && editingItem) {
+      if (mode === 'edit' && editingItem) {
         await api.updateItem(`${tab.endpoint}/${editingItem.id}`, payload)
       } else {
         await api.createItem(tab.endpoint, payload)
@@ -122,20 +170,50 @@ export function CrudFormDialog({
       onSaved()
       toast('success', mode === 'create' ? 'Berhasil dibuat' : 'Berhasil disimpan')
     } catch (e) {
-      toast('error', errorMessage(e, 'Gagal menyimpan'))
+      // Error dari backend (422) biasanya menyebut nama kolomnya. Coba
+      // tandai kolom itu supaya admin tahu persis mana yang ditolak.
+      const message = errorMessage(e, 'Gagal menyimpan')
+      toast('error', message)
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  /**
+   * Tutup modal, tapi minta konfirmasi dulu kalau ada perubahan yang belum
+   * disimpan. Dipanggil dari Escape / tombol X / area gelap / tombol Batal.
+   */
+  async function requestClose() {
+    if (saving) return
+    if (!isDirty) {
+      onClose()
+      return
+    }
+    const discard = await confirm(UNSAVED_CHANGES_CONFIRM)
+    if (discard) onClose()
+  }
+
+  /** Hapus penanda error sebuah kolom begitu admin mulai mengisinya lagi. */
+  function clearFieldError(name: string) {
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
+  }
+
+  async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     try {
       const url = await api.uploadImage(file)
       setFormData({ ...formData, image: url })
-      toast('success', 'Gambar berhasil diunggah')
+      // Upload hanya menaruh file di storage; datanya baru tersimpan saat
+      // admin menekan "Simpan". Pesan lama ("berhasil diunggah") membuat
+      // admin mengira datanya sudah aman.
+      toast('success', 'Gambar diunggah — tekan Simpan untuk menyimpan')
     } catch (e) {
       toast('error', 'Upload gagal: ' + errorMessage(e))
     } finally {
@@ -143,14 +221,14 @@ export function CrudFormDialog({
     }
   }
 
-  async function handleGalleryUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleGalleryUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setGalleryUploading(true)
     try {
       const url = await api.uploadImage(file)
       setFormData({ ...formData, gallery: [...(formData.gallery || []), url] })
-      toast('success', 'Gambar berhasil diunggah')
+      toast('success', 'Gambar ditambahkan ke galeri — tekan Simpan untuk menyimpan')
     } catch (e) {
       toast('error', 'Upload gagal: ' + errorMessage(e))
     } finally {
@@ -171,209 +249,76 @@ export function CrudFormDialog({
   }
 
   const fields = FORM_FIELDS[activeTab] || []
+  const galleryCount = (formData.gallery || []).length
+  const hasRequired = fields.some((f) => f.required)
+
+  // Id stabil per kolom supaya <label> bisa dihubungkan ke input-nya
+  // (`htmlFor`/`id`). Tanpa itu pembaca layar hanya membaca label tanpa
+  // tahu kolom mana yang dimaksud, dan fokus ke kolom error jadi Difficulty.
+  const fieldId = (name: string) => `field-${activeTab}-${name}`
+  const contentFieldId = (name: string) => `field-${activeTab}-c-${name}`
+
+  // Susunan baris grid tanpa lubang: field pendek dipasangkan berdua, field
+  // panjang membentang penuh, dan field pendek yang sendirian dibuat penuh
+  // supaya tidak ada setengah baris yang kosong (lihat computeSpans).
+  const contentFields = CONTENT_FIELDS[activeTab] || []
+  const contentSpans = computeSpans(contentFields, (f) => f.type === 'textarea' || f.type === 'list' || f.type === 'parent')
+  const infoSpans = computeSpans(fields, (f) => activeTab === 'social' && f.name === 'path')
 
   return (
-    <Dialog open onOpenChange={(val) => { if (!val) onClose() }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <tab.icon className="w-4 h-4 text-primary" />
+    <Dialog open onOpenChange={(val) => { if (!val) void requestClose() }}>
+      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl border-white/70 bg-[var(--bg-elevated)]/95 p-0 shadow-[0_24px_80px_-24px_rgba(15,60,40,0.45)] backdrop-blur-xl sm:rounded-2xl">
+        {/* ── Header ── */}
+        <div className="relative shrink-0 overflow-hidden border-b border-[var(--border)]/70 bg-gradient-to-r from-[var(--accent-subtle)] via-white/50 to-[var(--accent-gold)]/10 px-5 py-4 sm:px-6 sm:py-5">
+          <div className="pointer-events-none absolute -top-10 -right-8 h-28 w-28 rounded-full bg-[var(--accent-gold)]/20 blur-2xl" />
+          <div className="relative flex items-center gap-3.5 pr-8">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[#145337] text-white shadow-[0_10px_24px_-8px_rgba(26,107,71,0.55)]">
+              <tab.icon className="h-5 w-5" />
             </div>
-            <DialogTitle>
-              {mode === 'create' ? 'Buat' : 'Edit'} {tab.label}
-            </DialogTitle>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-[0.18em] text-[var(--accent)]/75 uppercase">
+                {mode === 'create' ? 'Tambah Data' : 'Ubah Data'}
+              </p>
+              <DialogTitle className="mt-0.5 truncate font-heading text-lg font-bold leading-snug text-[var(--text)]">
+                {tab.label}
+              </DialogTitle>
+            </div>
           </div>
-        </DialogHeader>
+        </div>
 
-        <div className="space-y-6 py-4">
-          {/* ── Informasi Utama ── */}
-          {fields.length > 0 && (
-            <section>
-              <SectionHeader label="Informasi Utama" color="var(--accent)" />
-              <div className="space-y-3.5">
-                {fields.map((f) => (
-                  <div key={f.name} className="space-y-1.5">
-                    <Label>{f.label}</Label>
-                    {activeTab === 'social' && f.name === 'path' ? (
-                      <div className="space-y-3 pt-2">
-                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                          {SOCIAL_PRESETS.map((preset) => (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              onClick={() => setFormData({ ...formData, [f.name]: preset.path })}
-                              className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all ${formData[f.name] === preset.path
-                                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
-                                  : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                                }`}
-                              title={preset.label}
-                            >
-                              <svg className="w-6 h-6 text-foreground" viewBox="0 0 24 24" fill="currentColor">
-                                <path d={preset.path} />
-                              </svg>
-                              <span className="text-[10px] text-muted-foreground truncate w-full text-center leading-tight">
-                                {preset.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                        {/* `path` is NOT NULL on the column, so a row saved
-                            without one is rejected with a 422. A preset-only
-                            picker made custom icons impossible and turned that
-                            rejection into a dead end -- keep free text open. */}
-                        <Textarea
-                          value={String(formData[f.name] ?? '')}
-                          onChange={(e) => setFormData({ ...formData, [f.name]: e.target.value })}
-                          rows={3}
-                          placeholder="M12 2c2.717 0 3.056..."
-                        />
-                      </div>
-                    ) : f.type === 'textarea' ? (
-                      <Textarea
-                        value={String(formData[f.name] ?? '')}
-                        onChange={(e) => setFormData({ ...formData, [f.name]: e.target.value })}
-                        rows={4}
-                        maxLength={10000}
-                      />
-                    ) : (
-                      <Input
-                        type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                        maxLength={maxLengthFor(f.name)}
-                        value={String(formData[f.name] ?? '')}
-                        onChange={(e) => setFormData({ ...formData, [f.name]: e.target.value })}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Gambar ── */}
-          {activeTab !== 'social' && (
-            <section>
-              <SectionHeader label="Gambar" color="var(--accent-gold)" />
-              <ModeToggle mode={imageMode} onMode={setImageMode} />
-
-              {imageMode === 'upload' ? (
-                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)] hover:border-[var(--accent)]/30 transition-all">
-                  {uploading ? <SpinnerIcon /> : <Upload className="w-4 h-4" />}
-                  {uploading ? 'Mengunggah...' : 'Pilih File'}
-                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploading} />
-                </label>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Link2 className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
-                  <Input
-                    type="url"
-                    value={formData.image ?? ''}
-                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-              )}
-
-              {formData.image && (
-                <div className="mt-4 flex items-start gap-4 p-3 rounded-xl border border-[var(--border)] bg-white/60">
-                  <Image
-                    src={formData.image} alt="preview" width={80} height={56}
-                    className="w-20 h-14 object-cover rounded-lg border border-[var(--border)] shrink-0"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-0.5">URL Gambar</p>
-                    <p className="text-xs text-[var(--text-secondary)] break-all">{formData.image}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, image: '' })}
-                    className="p-1 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
-                    aria-label="Hapus URL gambar"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* ── Galeri ── */}
-          {activeTab === 'news' && (
-            <section>
-              <SectionHeader label="Galeri" color="var(--accent-gold)" />
-              {(formData.gallery || []).length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-                  {(formData.gallery || []).map((url: string, idx: number) => (
-                    <div key={idx} className="relative group rounded-xl border border-[var(--border)] bg-white/60 overflow-hidden">
-                      <Image
-                        src={url} alt={`gallery ${idx + 1}`} width={160} height={96}
-                        className="w-full h-24 object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                      <button
-                        type="button" onClick={() => removeGalleryItem(idx)}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-white/80 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                        aria-label="Hapus gambar"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <ModeToggle mode={galleryInputMode} onMode={setGalleryInputMode} />
-              {galleryInputMode === 'upload' ? (
-                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)] hover:border-[var(--accent)]/30 transition-all">
-                  {galleryUploading ? <SpinnerIcon /> : <Upload className="w-4 h-4" />}
-                  {galleryUploading ? 'Mengunggah...' : 'Pilih File'}
-                  <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" disabled={galleryUploading} />
-                </label>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Link2 className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
-                  <Input
-                    type="url" value={galleryInputValue}
-                    onChange={(e) => setGalleryInputValue(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => addGalleryItem(galleryInputValue)}
-                    disabled={!galleryInputValue.trim()}
-                    className="p-2.5 rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent)]/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="Tambah galeri"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
+        {/* ── Body ── */}
+        <div className="modal-scroll flex-1 space-y-5 overflow-y-auto bg-[var(--bg-secondary)]/35 px-5 py-5 sm:px-6">
           {/* ── Detail Konten ── */}
           {HAS_CONTENT.includes(activeTab) && (
-            <section>
-              <SectionHeader label="Detail Konten" color="var(--accent)" />
-              <div className="space-y-3.5">
-                    {(CONTENT_FIELDS[activeTab] || []).map((f) => (
-                  <div key={f.name} className="space-y-1.5">
-                    <Label>{f.label}</Label>
+            <FormSection label="Detail Konten" icon={FileText}>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {contentFields.map((f, idx) => (
+                  <Field
+                    key={f.name}
+                    label={f.label}
+                    htmlFor={contentFieldId(f.name)}
+                    wide={contentSpans[idx]}
+                  >
                     {f.type === 'list' || f.type === 'textarea' ? (
                       <Textarea
+                        id={contentFieldId(f.name)}
+                        className={TEXTAREA_CLASS}
                         value={String(formData[`_c_${f.name}`] ?? '')}
                         onChange={(e) => setFormData({ ...formData, [`_c_${f.name}`]: e.target.value })}
                         rows={f.type === 'textarea' ? 5 : 4}
                       />
                     ) : f.type === 'number' ? (
                       <Input
+                        id={contentFieldId(f.name)}
+                        className={FIELD_CLASS}
                         type="number"
                         value={String(formData[`_c_${f.name}`] ?? '')}
                         onChange={(e) => setFormData({ ...formData, [`_c_${f.name}`]: e.target.value })}
                       />
                     ) : f.type === 'parent' ? (
                       <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        id={contentFieldId(f.name)}
+                        className="h-11 w-full rounded-xl border border-[var(--border)] bg-white/90 px-3 text-sm text-[var(--text)] transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none"
                         value={String(formData[`_c_${f.name}`] ?? '')}
                         onChange={(e) => setFormData({ ...formData, [`_c_${f.name}`]: e.target.value })}
                       >
@@ -384,24 +329,253 @@ export function CrudFormDialog({
                       </select>
                     ) : (
                       <Input
+                        id={contentFieldId(f.name)}
+                        className={FIELD_CLASS}
                         type="text"
                         value={String(formData[`_c_${f.name}`] ?? '')}
                         onChange={(e) => setFormData({ ...formData, [`_c_${f.name}`]: e.target.value })}
                       />
                     )}
-                  </div>
+                  </Field>
                 ))}
               </div>
-            </section>
+            </FormSection>
+          )}
+
+          {/* ── Gambar ── */}
+          {activeTab !== 'social' && !NO_IMAGE_TABS.includes(activeTab) && (
+            <FormSection label="Gambar Utama" icon={ImageIcon} tone="gold">
+              <div className="space-y-3.5">
+                <ModeToggle mode={imageMode} onMode={setImageMode} />
+
+                {imageMode === 'upload' ? (
+                  <label className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-[var(--border)] bg-white/60 px-4 py-7 text-center transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60">
+                    <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] transition-transform group-hover:scale-105">
+                      {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+                    </span>
+                    <span className="text-sm font-semibold text-[var(--text)]">
+                      {uploading ? 'Mengunggah…' : 'Klik untuk pilih gambar'}
+                    </span>
+                    <span className="text-xs text-[var(--text-muted)]">PNG, JPG, atau WEBP</span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploading} />
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                    <Input
+                      className={cn(FIELD_CLASS, 'pl-9')}
+                      type="url"
+                      value={formData.image ?? ''}
+                      onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                      placeholder="https://example.com/image.jpg"
+                    />
+                  </div>
+                )}
+
+                {formData.image && (
+                  <div className="flex items-start gap-3.5 rounded-2xl border border-[var(--border)]/70 bg-white/70 p-3">
+                    <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+                      <Image
+                        src={formData.image} alt="Pratinjau gambar" width={96} height={64}
+                        className="h-full w-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <p className="text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">Pratinjau</p>
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed break-all text-[var(--text-secondary)]">{formData.image}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, image: '' })}
+                      className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
+                      aria-label="Hapus URL gambar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </FormSection>
+          )}
+
+          {/* ── Galeri ── */}
+          {activeTab === 'news' && (
+            <FormSection
+              label="Galeri"
+              icon={Images}
+              tone="gold"
+              hint={galleryCount > 0 ? `${galleryCount} gambar` : 'Belum ada gambar'}
+            >
+              <div className="space-y-3.5">
+                {galleryCount > 0 && (
+                  <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
+                    {(formData.gallery || []).map((url: string, idx: number) => (
+                      <div key={idx} className="group relative aspect-4/3 overflow-hidden rounded-xl border border-[var(--border)]/70 bg-[var(--bg-secondary)]">
+                        <Image
+                          src={url} alt={`Galeri ${idx + 1}`} width={160} height={120}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                        <button
+                          type="button" onClick={() => removeGalleryItem(idx)}
+                          className="absolute top-1.5 right-1.5 rounded-lg bg-white/90 p-1.5 text-[var(--text-secondary)] shadow-sm transition-all hover:bg-red-50 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                          aria-label={`Hapus gambar ${idx + 1}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <ModeToggle mode={galleryInputMode} onMode={setGalleryInputMode} />
+                {galleryInputMode === 'upload' ? (
+                  <label className="group inline-flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-[var(--border)] bg-white/60 px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60 hover:text-[var(--text)]">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)]">
+                      {galleryUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    </span>
+                    {galleryUploading ? 'Mengunggah…' : 'Tambah dari file'}
+                    <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" disabled={galleryUploading} />
+                  </label>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <Input
+                        className={cn(FIELD_CLASS, 'pl-9')}
+                        type="url" value={galleryInputValue}
+                        onChange={(e) => setGalleryInputValue(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addGalleryItem(galleryInputValue)}
+                      disabled={!galleryInputValue.trim()}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-sm transition-all hover:bg-[var(--accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Tambah galeri"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </FormSection>
+          )}
+
+          {/* ── Informasi Utama ── */}
+          {fields.length > 0 && (
+            <FormSection label="Informasi Utama" icon={ListChecks}>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {fields.map((f, idx) => (
+                  <Field
+                    key={f.name}
+                    label={f.label}
+                    htmlFor={fieldId(f.name)}
+                    required={f.required}
+                    wide={infoSpans[idx]}
+                  >
+                    {activeTab === 'social' && f.name === 'path' ? (
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                          {SOCIAL_PRESETS.map((preset) => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, [f.name]: preset.path })}
+                              className={cn(
+                                'flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition-all',
+                                formData[f.name] === preset.path
+                                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
+                                  : 'border-border bg-white/60 hover:border-primary/50 hover:bg-primary/5',
+                              )}
+                              title={preset.label}
+                            >
+                              <svg className="h-6 w-6 text-foreground" viewBox="0 0 24 24" fill="currentColor">
+                                <path d={preset.path} />
+                              </svg>
+                              <span className="w-full truncate text-center text-[10px] leading-tight text-muted-foreground">
+                                {preset.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        {/* `path` is NOT NULL on the column, so a row saved
+                            without one is rejected with a 422. A preset-only
+                            picker made custom icons impossible and turned that
+                            rejection into a dead end -- keep free text open. */}
+                        <Textarea
+                          className={TEXTAREA_CLASS}
+                          value={String(formData[f.name] ?? '')}
+                          onChange={(e) => setFormData({ ...formData, [f.name]: e.target.value })}
+                          rows={3}
+                          placeholder="M12 2c2.717 0 3.056..."
+                        />
+                      </div>
+                    ) : f.type === 'textarea' ? (
+                      <Textarea
+                        id={fieldId(f.name)}
+                        ref={(el) => { fieldRefs.current[f.name] = el }}
+                        className={cn(TEXTAREA_CLASS, fieldErrors[f.name] && FIELD_ERROR_CLASS)}
+                        error={fieldErrors[f.name]}
+                        value={String(formData[f.name] ?? '')}
+                        onChange={(e) => {
+                          setFormData({ ...formData, [f.name]: e.target.value })
+                          clearFieldError(f.name)
+                        }}
+                        rows={4}
+                        maxLength={10000}
+                      />
+                    ) : (
+                      <Input
+                        id={fieldId(f.name)}
+                        ref={(el) => { fieldRefs.current[f.name] = el }}
+                        className={cn(FIELD_CLASS, fieldErrors[f.name] && FIELD_ERROR_CLASS)}
+                        error={fieldErrors[f.name]}
+                        type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                        maxLength={maxLengthFor(f.name)}
+                        value={String(formData[f.name] ?? '')}
+                        onChange={(e) => {
+                          setFormData({ ...formData, [f.name]: e.target.value })
+                          clearFieldError(f.name)
+                        }}
+                      />
+                    )}
+                  </Field>
+                ))}
+              </div>
+            </FormSection>
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </Button>
-        </DialogFooter>
+        {/* ── Footer ── */}
+        <div className="shrink-0 border-t border-[var(--border)]/70 bg-white/80 px-5 py-4 backdrop-blur sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            {isDirty ? (
+              // Penanda eksplisit bahwa isi form belum sampai ke server. Tanpa
+              // ini admin bisa mengira upload/teksannya sudah tersimpan.
+              <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Perubahan belum disimpan
+              </p>
+            ) : (
+              <p className="hidden items-center gap-1.5 text-xs text-[var(--text-muted)] sm:flex">
+                <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent)]" />
+                {hasRequired ? '* Wajib diisi' : 'Perubahan langsung tersinkron ke situs publik.'}
+              </p>
+            )}
+            <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
+              <Button variant="ghost" onClick={() => void requestClose()} className="rounded-xl text-[var(--text-secondary)]">
+                Batal
+              </Button>
+              <Button onClick={handleSave} loading={saving} className="min-w-[120px] gap-2 rounded-xl">
+                {!saving && <Save className="h-4 w-4" />}
+                {saving ? 'Menyimpan…' : mode === 'create' ? 'Simpan' : 'Simpan Perubahan'}
+              </Button>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -409,13 +583,80 @@ export function CrudFormDialog({
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
 
-function SectionHeader({ label, color }: { label: string; color: string }) {
+/**
+ * Bagi field ke baris grid 2 kolom tanpa setengah baris kosong: field yang
+ * ditandai `isWide` selalu membentang penuh, field pendek dipasangkan berdua,
+ * dan bila rentetan field pendek berjumlah ganjil maka field terakhir dibuat
+ * penuh. Return: `true` = field membentang dua kolom.
+ */
+function computeSpans<T>(items: T[], isWide: (item: T) => boolean): boolean[] {
+  const spans = items.map(isWide)
+  let runStart = -1
+
+  const closeRun = (end: number) => {
+    if (runStart >= 0 && (end - runStart) % 2 === 1) spans[end - 1] = true
+    runStart = -1
+  }
+
+  items.forEach((item, i) => {
+    if (isWide(item)) closeRun(i)
+    else if (runStart < 0) runStart = i
+  })
+  closeRun(items.length)
+
+  return spans
+}
+
+function FormSection({
+  label, icon: Icon, tone = 'emerald', hint, children,
+}: {
+  label: string
+  icon: LucideIcon
+  tone?: 'emerald' | 'gold'
+  hint?: string
+  children: ReactNode
+}) {
   return (
-    <div className="flex items-center gap-2 mb-4">
-      <div className="w-1 h-4 rounded-full" style={{ background: color }} />
-      <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-white/85 shadow-[0_1px_3px_rgba(15,60,40,0.05)]">
+      <div className="flex items-center gap-2.5 border-b border-[var(--border)]/60 bg-[var(--bg-secondary)]/45 px-4 py-2.5">
+        <span
+          className={cn(
+            'flex h-6 w-6 items-center justify-center rounded-lg',
+            tone === 'gold' ? 'bg-[var(--accent-gold)]/15 text-[#A67C2E]' : 'bg-[var(--accent-subtle)] text-[var(--accent)]',
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="text-[11px] font-semibold tracking-[0.14em] text-[var(--text-secondary)] uppercase">{label}</span>
+        {hint && <span className="ml-auto text-[11px] text-[var(--text-muted)]">{hint}</span>}
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
+  )
+}
+
+function Field({
+  label, htmlFor, required, wide, children,
+}: {
+  label: string
+  htmlFor?: string
+  required?: boolean
+  wide?: boolean
+  children: ReactNode
+}) {
+  return (
+    <div className={cn('space-y-1.5', wide && 'sm:col-span-2')}>
+      {/* Label dijaga satu baris (truncate + tooltip) supaya input yang
+          sebaris selalu rata atas-bawah walau labelnya panjang. */}
+      <Label
+        htmlFor={htmlFor}
+        title={label}
+        className="block truncate text-[13px] font-medium text-[var(--text-secondary)]"
+      >
         {label}
-      </span>
+        {required && <span className="ml-0.5 text-red-500" aria-hidden="true"> *</span>}
+      </Label>
+      {children}
     </div>
   )
 }
@@ -424,28 +665,21 @@ function ModeToggle({
   mode, onMode,
 }: { mode: 'upload' | 'url'; onMode: (m: 'upload' | 'url') => void }) {
   return (
-    <div className="flex gap-2 mb-4">
+    <div className="inline-flex items-center gap-1 rounded-xl bg-[var(--bg-secondary)] p-1">
       {(['upload', 'url'] as const).map((m) => (
         <button
           key={m} type="button" onClick={() => onMode(m)}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${mode === m
-              ? 'bg-[var(--accent)] text-white shadow-sm'
-              : 'border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
-            }`}
+          className={cn(
+            'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all',
+            mode === m
+              ? 'bg-white text-[var(--text)] shadow-sm'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text)]',
+          )}
         >
-          {m === 'upload' ? <Upload className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+          {m === 'upload' ? <Upload className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
           {m === 'upload' ? 'Upload' : 'URL'}
         </button>
       ))}
     </div>
-  )
-}
-
-function SpinnerIcon() {
-  return (
-    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
   )
 }

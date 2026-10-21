@@ -51,7 +51,6 @@ export default function PageHeader({ title, subtitle, badge, align = 'left' }: P
         animation: 'gradientShift 8s ease infinite',
       }}
     >
-      <div className="absolute top-0 left-0 right-0 verse-strip" />
       {align === 'left' && (
         <>
           <div

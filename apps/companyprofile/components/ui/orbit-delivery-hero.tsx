@@ -1790,6 +1790,15 @@ var init_courierGreeting = __esm({
 
 
     up = new Vector34(0, 1, 0);
+    // The original courier rig names its bones "RightArm", …, while Mixamo-derived
+    // rigs (the riggged graduate) prefix them, e.g. "mixamorigRightArm". Resolve
+    // greeting joints by exact name first, then the Mixamo-prefixed variant.
+    function findGreetingBone(scene, name) {
+      const exact = scene.getObjectByName(name);
+      if (exact) return exact;
+      const mixed = "mixamorig" + name;
+      return scene.getObjectByName(mixed) ?? scene.getObjectByName("mixamorig" + name.charAt(0).toUpperCase() + name.slice(1)) ?? null;
+    }
 
 
 
@@ -1817,7 +1826,7 @@ var init_courierGreeting = __esm({
 
 
 
-          const bone = scene.getObjectByName(name);
+          const bone = findGreetingBone(scene, name);
 
 
 
@@ -2393,7 +2402,7 @@ function makeIdle(scene) {
 
 
 
-    if (node.name === "Spine02" || node.name === "neck") middle.multiply(breath);
+    if (node.name === "mixamorigSpine2" || node.name === "mixamorigNeck" || node.name === "Spine02" || node.name === "neck") middle.multiply(breath);
 
 
 
@@ -2405,7 +2414,7 @@ function makeIdle(scene) {
 
 
 
-    if (node.name === "Hips") inhale.y += 4e-3;
+    if (node.name === "mixamorigHips" || node.name === "Hips") inhale.y += 4e-3;
 
 
 
@@ -2439,11 +2448,11 @@ function makeIdle(scene) {
 // the head, hands, feet and bag are bound to neither. Each mask becomes a vertex
 // attribute, so the tint deforms along with the walk cycle. Passing null as a
 // zone color keeps the original texture for that zone.
-const SHIRT_JOINTS = new Set(["Spine", "Spine01", "Spine02", "LeftShoulder", "LeftArm", "LeftForeArm", "RightShoulder", "RightArm", "RightForeArm"]);
+const SHIRT_JOINTS = new Set(["mixamorigSpine", "mixamorigSpine1", "mixamorigSpine2", "mixamorigLeftShoulder", "mixamorigLeftArm", "mixamorigLeftForeArm", "mixamorigRightShoulder", "mixamorigRightArm", "mixamorigRightForeArm"]);
 
-// Hips + upper/lower leg, stopping short of the feet. The source model wears
-// short khaki trousers, so painting the whole leg reads as long trousers.
-const PANTS_JOINTS = new Set(["Hips", "LeftUpLeg", "LeftLeg", "RightUpLeg", "RightLeg"]);
+// Hips + upper/lower leg, stopping short of the feet. Painting the whole leg
+// over the toga skirt reads as trousers under the robe.
+const PANTS_JOINTS = new Set(["mixamorigHips", "mixamorigLeftUpLeg", "mixamorigLeftLeg", "mixamorigRightUpLeg", "mixamorigRightLeg"]);
 
 // The walk cycle drives CourierBag.translation on every frame, so moving the
 // bone once at load time is pointless: the mixer overwrites it on the first
@@ -2485,7 +2494,9 @@ function applyBodyTints(root, zones) {
   root.traverse((node) => {
 
     // Body only: the shoulder strap and the bag keep their own materials.
-    if (!(node instanceof SkinnedMesh3) || !node.name.includes("Courier_Body")) return;
+    // The riggged graduate ships a single "geometry_0" skinned mesh, so accept
+    // every skinned mesh rather than keying off the courier's "Courier_Body".
+    if (!(node instanceof SkinnedMesh3)) return;
 
     const skinIndex = node.geometry.attributes.skinIndex;
     const skinWeight = node.geometry.attributes.skinWeight;
@@ -2633,7 +2644,7 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-    const modelFile = "courier.glb";
+    const modelFile = "rigged-model-clean.glb";
 
 
 
@@ -2788,7 +2799,18 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
       applyBodyTints(gltf.scene, [{ slot: "shirt", joints: SHIRT_JOINTS, hex: shirtColor }, { slot: "pants", joints: PANTS_JOINTS, hex: pantsColor }, { slot: "cap", cutoff: capCutoff, hex: showCap ? null : capColor }]);
 
 
-      const clips = gltf.animations.filter((animation) => animation.duration > 0.3);
+      // The riggged graduate ships several clips (Idle, Walk, Walk Backward,
+      // Jog Backward, Yes). The courier rig drives a single seamless
+      // forward-walk cycle, so pick the lone forward walk and ignore the rest.
+      const walkable = gltf.animations.filter((animation) => animation.duration > 0.3);
+      const walkClip = walkable.find((animation) => /walk/i.test(animation.name) && !/backward/i.test(animation.name)) ?? walkable[0];
+      const clips = walkClip ? [walkClip] : [];
+
+
+
+      // Prefer the rig's authored Idle clip — the auto-rigged bind pose is a
+      // crouched A-pose and reads poorly when standing still.
+      const idleClip = walkable.find((animation) => /^idle/i.test(animation.name)) ?? null;
 
 
 
@@ -2796,11 +2818,16 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-        disposeScene(gltf.scene);
-
-
-
-        throw new Error("The courier run animation is missing.");
+        console.warn("No animation clips found; displaying static model.");
+        // Fallback: static model without animation
+        const mixer = new AnimationMixer(gltf.scene);
+        const idle = mixer.clipAction(idleClip ?? makeIdle(gltf.scene)).play();
+        // The graduate rig carries no bag bone; keep the suspension optional.
+        const bag = gltf.scene.getObjectByName("CourierBag") ? new BagSuspension(gltf.scene) : null;
+        const greeting = new CourierGreeting(gltf.scene);
+        setAsset({ scene: gltf.scene, mixer, idle, run: null, duration: 0, bag, greeting });
+        onReady?.(true);
+        return;
 
 
 
@@ -2816,7 +2843,7 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-      const bag = new BagSuspension(gltf.scene);
+      const bag = gltf.scene.getObjectByName("CourierBag") ? new BagSuspension(gltf.scene) : null;
 
 
 
@@ -2824,7 +2851,7 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-      const idle = mixer.clipAction(makeIdle(gltf.scene)).play();
+      const idle = mixer.clipAction(idleClip ?? makeIdle(gltf.scene)).play();
 
 
 
@@ -3032,7 +3059,7 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-    asset.bag.restore();
+    asset.bag?.restore();
 
 
 
@@ -3048,7 +3075,7 @@ function Courier({ motion, paused, reduced, onReady, shirtColor, pantsColor, sho
 
 
 
-    asset.bag.update(dt, activity, m.phase, turnVelocity.current, reduced, lean.current.rotation.x);
+    asset.bag?.update(dt, activity, m.phase, turnVelocity.current, reduced, lean.current.rotation.x);
 
 
 
@@ -3762,7 +3789,7 @@ function World2({ motion, auto, reduced, onReady, shirtColor, pantsColor, showBa
 
 
 
-    onReady?.(!!asset && courierReady);
+    onReady?.(!!asset);
 
 
 
@@ -3806,7 +3833,7 @@ function World2({ motion, auto, reduced, onReady, shirtColor, pantsColor, showBa
 
 
 
-    if (!asset || !courierReady) return;
+    if (!asset) return;
 
 
 
@@ -3906,7 +3933,7 @@ function World2({ motion, auto, reduced, onReady, shirtColor, pantsColor, showBa
 
 
 
-    <group ref={runner} visible={!!asset && courierReady}><Courier motion={motion} paused={!auto} reduced={reduced} onReady={setCourierReady} shirtColor={shirtColor} pantsColor={pantsColor} showBag={showBag} showStrap={showStrap} showCap={showCap} capCutoff={capCutoff} /></group>
+    <group ref={runner} visible={!!asset}><Courier motion={motion} paused={!auto} reduced={reduced} onReady={setCourierReady} shirtColor={shirtColor} pantsColor={pantsColor} showBag={showBag} showStrap={showStrap} showCap={showCap} capCutoff={capCutoff} /></group>
 
 
 
@@ -4148,7 +4175,7 @@ function buildStories(academicYear) {
 
         "Kurikulum terintegrasi antara hafalan Al-Qur'an 30 Juz mutqin dengan keahlian rekayasa teknologi digital.",
 
-        "Santri prótesissale dilengkapi keterampilan modern: Full-Stack Web, Artificial Intelligence, Mobile App Development, serta kefasihan dwibahasa Arab dan Inggris."
+        "Santri dibekali keterampilan modern: Full-Stack Web, Artificial Intelligence, Mobile App Development, serta kefasihan dwibahasa Arab dan Inggris."
 
       ]
 
@@ -4174,9 +4201,53 @@ function buildStories(academicYear) {
 
 
 
-function App({ academicYear, shirtColor, pantsColor, showBag, showStrap, showCap, capCutoff }) {
+// Copy hero dari CMS (entitas 'ppdb-copy'). Field kosong/whitespace jatuh ke
+// teks bawaan supaya halaman tetap utuh walau konten hero belum diisi admin.
+
+function cleanHeroCopy(value) {
+
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+
+}
+
+function buildHeroCopy(heroCopy) {
+
+  var src = heroCopy || {};
+
+  var defaultLines = ["Generasi Qur'ani.", "Unggul dalam", "Dunia Digital."];
+
+  var rawTitle = cleanHeroCopy(src.hero_title);
+
+  // Judul multi-baris dari CMS; pemisah barisnya newline (kode 10).
+  var lines = rawTitle
+    ? rawTitle.split(String.fromCharCode(10)).map(function (line) { return line.trim(); }).filter(Boolean)
+    : defaultLines;
+
+  if (lines.length === 0) lines = defaultLines;
+
+  var rawProof = cleanHeroCopy(src.hero_proof) || "30 Juz | 2 Jenjang | 1 Ekosistem";
+
+  var proof = rawProof.split("|").map(function (item) { return item.trim(); }).filter(Boolean);
+
+  return {
+    titleHead: lines.slice(0, -1),
+    titleLast: lines[lines.length - 1],
+    description: cleanHeroCopy(src.hero_desc) || "Mencetak santri penghafal Al-Qur'an mutqin yang berwawasan global dan menguasai teknologi digital masa depan. Bersama Pesantren Tahfidz Qur'an & Digital Ar-Rahman.",
+    proof: proof.length > 0 ? proof : ["30 Juz", "2 Jenjang", "1 Ekosistem"],
+    ctaLabel: cleanHeroCopy(src.hero_cta_label) || "Lihat Program",
+    ctaHref: cleanHeroCopy(src.hero_cta_href) || "#info-section",
+    registerLabel: cleanHeroCopy(src.hero_register_label) || "Daftar PPDB",
+    registerHref: cleanHeroCopy(src.hero_register_href) || "/register",
+  };
+
+}
+
+function App({ academicYear, shirtColor, pantsColor, showBag, showStrap, showCap, capCutoff, heroCopy }) {
 
   var stories = buildStories(academicYear);
+
+  // Copy hero dari CMS (buildHeroCopy).
+  var hero = buildHeroCopy(heroCopy);
 
 
 
@@ -4496,7 +4567,7 @@ function App({ academicYear, shirtColor, pantsColor, showBag, showStrap, showCap
 
 
 
-      <a href="/register" className="header-cta inline-flex items-center justify-center font-medium bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-5 py-2.5 transition-colors">Daftar PPDB</a>
+      <a href={hero.registerHref} className="header-cta inline-flex items-center justify-center font-medium bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-5 py-2.5 transition-colors">{hero.registerLabel}</a>
 
 
 
@@ -4512,25 +4583,27 @@ function App({ academicYear, shirtColor, pantsColor, showBag, showStrap, showCap
 
 
 
-        <p className="eyebrow text-emerald-700 dark:text-emerald-400 font-semibold tracking-wider">{academicYear ? "PENERIMAAN PESERTA DIDIK BARU " + academicYear : "PENERIMAAN PESERTA DIDIK BARU"}</p>
+        <p className="eyebrow">{academicYear ? "PENERIMAAN PESERTA DIDIK BARU " + academicYear : "PENERIMAAN PESERTA DIDIK BARU"}</p>
 
 
 
-        <h1 id="hero-title">Generasi Qur'ani.<br />Unggul dalam<br /><em>Dunia Digital.</em></h1>
+        <h1 id="hero-title">{hero.titleHead.map((line) => <span key={line}>{line}<br /></span>)}<em>{hero.titleLast}</em></h1>
 
 
 
-        <p className="hero-description">Mencetak santri penghafal Al-Qur'an mutqin yang berwawasan global dan menguasai teknologi digital masa depan.<br className="desktop-break" /> Bersama Pesantren Tahfidz Qur'an & Digital Ar-Rahman.</p>
+        <p className="hero-description">{hero.description}</p>
 
         <div className="hero-proof" aria-label="Keunggulan program">
-          <span><strong>30</strong> Juz</span>
-          <span><strong>2</strong> Jenjang</span>
-          <span><strong>1</strong> Ekosistem</span>
+          {hero.proof.map((item) => {
+            const parts = item.split(" ")
+            const bold = /^[0-9]+$/.test(parts[0] || "")
+            return <span key={item}>{bold ? <strong>{parts[0]}</strong> : null}{bold ? " " + parts.slice(1).join(" ") : item}</span>
+          })}
         </div>
 
 
 
-        <a href="#info-section" className="explore-button inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-full px-6 py-3 transition-colors shadow-md">Lihat Program <Arrow /></a>
+        <a href={hero.ctaHref} className="explore-button inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-full px-6 py-3 whitespace-nowrap transition-colors shadow-md">{hero.ctaLabel} <Arrow /></a>
 
 
 
@@ -4969,13 +5042,20 @@ var css = `@font-face{font-family:'Orbit DM Sans';font-style:normal;font-weight:
 
 /* PPDB visual polish: give the 3D scene a calm, editorial frame so the
    character reads clearly against the light background. */
-.orbit-delivery .hero-copy{max-width:560px}
-.orbit-delivery .hero-copy h1{max-width:600px;text-wrap:balance}
-.orbit-delivery .hero-description{max-width:475px}
-.orbit-delivery .hero-proof{display:flex;align-items:center;gap:18px;margin:0 0 30px;color:#6b8175;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
-.orbit-delivery .hero-proof span{display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
-.orbit-delivery .hero-proof span+span{border-left:1px solid #cadbd1;padding-left:18px}
-.orbit-delivery .hero-proof strong{color:#1A6B47;font-size:18px;letter-spacing:-.04em}
+/* Hero copy: modern & minimal — calmer type scale, one clear action.
+   The 3D globe + courier scene stays untouched. */
+.orbit-delivery .hero-copy{padding-top:clamp(44px,7vh,96px);max-width:560px}
+.orbit-delivery .eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:11.5px;font-weight:600;letter-spacing:.16em;color:var(--orbit-nav);margin:0 0 26px}
+.orbit-delivery .eyebrow::before{content:"";flex:none;width:6px;height:6px;border-radius:999px;background:#D4A853;box-shadow:0 0 0 4px rgba(212,168,83,.16)}
+.orbit-delivery .hero-copy h1{max-width:600px;text-wrap:balance;font-size:clamp(52px,4.7vw,78px);line-height:1.05;letter-spacing:-.04em;margin:0 0 24px}
+.orbit-delivery .hero-copy h1 em{font-family:inherit;font-style:normal;font-weight:inherit;font-size:1em;letter-spacing:inherit;line-height:inherit;color:var(--orbit-accent)}
+.orbit-delivery .hero-description{max-width:450px;font-size:16.5px;line-height:1.65;letter-spacing:-.01em;margin:0 0 34px}
+.orbit-delivery .hero-proof{display:flex;align-items:flex-start;gap:44px;margin:0 0 36px;color:var(--orbit-muted);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase}
+.orbit-delivery .hero-proof span{display:flex;flex-direction:column;gap:6px;white-space:nowrap}
+.orbit-delivery .hero-proof strong{order:-1;font-size:26px;font-weight:650;letter-spacing:-.03em;color:var(--orbit-ink)}
+.orbit-delivery .hero-copy .explore-button{pointer-events:auto;min-width:0;min-height:0;height:52px;padding:0 30px;border-radius:999px;gap:10px;font-size:15px;font-weight:600;white-space:nowrap;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 16px 30px -18px rgba(20,83,55,.65)}
+.orbit-delivery .hero-copy .explore-button svg{flex:none;width:18px;height:18px;transition:transform .25s ease}
+.orbit-delivery .hero-copy .explore-button:hover svg{transform:translateX(3px)}
 .orbit-delivery .visual-column{isolation:isolate}
 .orbit-delivery .visual-column::before{content:'';position:absolute;z-index:-2;inset:14% 6% 8% 8%;border-radius:48% 52% 45% 55%;background:radial-gradient(ellipse at 50% 43%,rgba(211,231,222,.68) 0%,rgba(231,239,234,.38) 42%,rgba(246,244,237,0) 72%);filter:blur(3px);transform:rotate(-8deg)}
 .orbit-delivery .visual-column::after{content:'';position:absolute;z-index:-3;inset:12% 9% 8% 12%;border:1px solid rgba(26,107,71,.12);border-radius:50%;transform:rotate(-14deg);box-shadow:0 0 0 22px rgba(26,107,71,.025),0 0 0 44px rgba(26,107,71,.018)}
@@ -4997,16 +5077,24 @@ var css = `@font-face{font-family:'Orbit DM Sans';font-style:normal;font-weight:
 
 @media(max-width:1150px){
   .orbit-delivery .hero-copy{max-width:470px}
+  .orbit-delivery .hero-copy h1{font-size:clamp(46px,5.2vw,58px)}
+  .orbit-delivery .hero-description{font-size:15.5px;max-width:400px}
+  .orbit-delivery .hero-proof{gap:34px}
+  .orbit-delivery .hero-proof strong{font-size:22px}
   .orbit-delivery .visual-frame{inset:16% 10% 12% 8%}
   .orbit-delivery .visual-kicker{left:11%}
   .orbit-delivery .scene-status{right:9%}
 }
 
 @media(max-width:759px){
-  .orbit-delivery .hero-copy{max-width:none}
-  .orbit-delivery .hero-proof{gap:10px;margin-bottom:22px;font-size:9px}
-  .orbit-delivery .hero-proof span+span{padding-left:10px}
-  .orbit-delivery .hero-proof strong{font-size:15px}
+  .orbit-delivery .hero-copy{max-width:none;padding-top:34px}
+  .orbit-delivery .eyebrow{font-size:10px;letter-spacing:.18em;margin-bottom:18px}
+  .orbit-delivery .hero-copy h1{font-size:clamp(40px,10.5vw,54px);line-height:1.06;margin-bottom:20px}
+  .orbit-delivery .hero-description{font-size:15px;line-height:1.6;max-width:340px;margin-bottom:26px}
+  .orbit-delivery .hero-proof{gap:24px;margin-bottom:26px;font-size:9.5px}
+  .orbit-delivery .hero-proof span{gap:4px}
+  .orbit-delivery .hero-proof strong{font-size:20px}
+  .orbit-delivery .hero-copy .explore-button{height:50px;padding:0 24px;font-size:14px}
   .orbit-delivery .visual-column::before{inset:8% 2% 8% 2%}
   .orbit-delivery .visual-column::after{inset:6% 7% 7% 7%}
   .orbit-delivery .visual-frame{inset:9% 13% 11% 13%;border-radius:26px}
@@ -5017,9 +5105,16 @@ var css = `@font-face{font-family:'Orbit DM Sans';font-style:normal;font-weight:
   .orbit-delivery .site-footer{bottom:16px}
 }
 
+@media(min-width:760px) and (max-height:880px){
+  .orbit-delivery .hero-copy{padding-top:clamp(24px,4.5vh,56px)}
+  .orbit-delivery .hero-copy h1{font-size:clamp(42px,4vw,58px);margin-bottom:20px}
+  .orbit-delivery .hero-description{margin-bottom:26px}
+  .orbit-delivery .hero-proof{margin-bottom:28px}
+}
+
 `;
 
-/** @param {{ theme?: string, assetBaseUrl?: string, academicYear?: string | null, shirtColor?: number | null, pantsColor?: number | null, showBag?: boolean, showStrap?: boolean, showCap?: boolean, capCutoff?: number | null }} props */
+/** @param {{ theme?: string, assetBaseUrl?: string, academicYear?: string | null, shirtColor?: number | null, pantsColor?: number | null, showBag?: boolean, showStrap?: boolean, showCap?: boolean, capCutoff?: number | null, copy?: { hero_title?: string, hero_desc?: string, hero_proof?: string, hero_cta_label?: string, hero_cta_href?: string, hero_register_label?: string, hero_register_href?: string } | null }} props */
 
 function OrbitDeliveryHero(props) {
 
@@ -5028,6 +5123,9 @@ function OrbitDeliveryHero(props) {
   var assetBaseUrl = props.assetBaseUrl || "/";
 
   var academicYear = props.academicYear || null;
+
+  // Copy hero dari CMS (entitas 'ppdb-copy'); default di buildHeroCopy.
+  var copy = props.copy || null;
 
   // Hex color for the courier's shirt (torso + sleeves). Pass null for the original white clay.
 
@@ -5055,7 +5153,7 @@ function OrbitDeliveryHero(props) {
   // Hair tone sampled from the atlas at head height, so the cap blends into the hair.
   const capColor = props.capColor === undefined ? 0x674B43 : props.capColor;
 
-  return <AssetBaseContext.Provider value={assetBaseUrl.replace(/\/$/, "") + "/"}><div className="orbit-delivery" data-theme={theme}><style>{css}</style><App academicYear={academicYear} shirtColor={shirtColor} pantsColor={pantsColor} showBag={showBag} showStrap={showStrap} showCap={showCap} capCutoff={capCutoff} /></div></AssetBaseContext.Provider>;
+  return <AssetBaseContext.Provider value={assetBaseUrl.replace(/\/$/, "") + "/"}><div className="orbit-delivery" data-theme={theme}><style>{css}</style><App academicYear={academicYear} shirtColor={shirtColor} pantsColor={pantsColor} showBag={showBag} showStrap={showStrap} showCap={showCap} capCutoff={capCutoff} heroCopy={copy} /></div></AssetBaseContext.Provider>;
 
 }
 

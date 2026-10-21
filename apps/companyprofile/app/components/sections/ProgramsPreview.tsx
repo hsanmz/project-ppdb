@@ -136,7 +136,9 @@ export default function ProgramsPreview({ programs = [] }: { programs?: Program[
       <div className="relative z-10 w-full flex-1 flex items-start pt-2 sm:pt-4">
         <div ref={pinWrapRef} className="horiz-gallery-strip flex gap-4 sm:gap-6 px-4 sm:px-6 md:px-12 w-max">
           {displayPrograms.map((prog) => {
-            const Icon = prog.icon as any
+            // `icon` sudah berupa komponen: dari CMS di-resolve lewat
+            // `iconMap`, sedangkan data cadangan memakai komponen lucide langsung.
+            const Icon = prog.icon as React.ComponentType<{ className?: string }>
             return (
               <TiltCard key={prog.id} className="group shrink-0 w-[85vw] sm:w-[380px] md:w-[400px]">
                 <Link
@@ -144,8 +146,7 @@ export default function ProgramsPreview({ programs = [] }: { programs?: Program[
                   className="glass-card rounded-2xl overflow-hidden !no-underline flex flex-col h-full"
                 >
                   <div className="p-5 sm:p-6 md:p-7 flex flex-col flex-1">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="verse-strip w-12" />
+                    <div className="flex items-center justify-end mb-4">
                       <div className="w-12 h-12 rounded-xl bg-[var(--accent-subtle)] flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Icon className="w-6 h-6 text-[var(--accent)]" />
                       </div>

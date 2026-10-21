@@ -12,23 +12,13 @@ import {
 } from '@/app/components/ui/Card'
 import type { RowRecord } from './_types'
 import { errorMessage } from './_types'
+import { CONTACT_FIELDS } from './_constants'
 
 interface Props {
   contactInfo: RowRecord | undefined
   canCrud: boolean
   onSave: () => void
 }
-
-const CONTACT_FIELDS = [
-  { key: 'phone_primary', label: 'Telepon Utama', type: 'text' },
-  { key: 'phone_secondary', label: 'Telepon Kedua', type: 'text' },
-  { key: 'whatsapp', label: 'WhatsApp', type: 'text' },
-  { key: 'email_primary', label: 'Email Utama', type: 'text' },
-  { key: 'email_admission', label: 'Email Penerimaan (PPDB)', type: 'text' },
-  { key: 'office_hours', label: 'Jam Operasional Kantor', type: 'text' },
-  { key: 'address', label: 'Alamat Lengkap', type: 'textarea' },
-  { key: 'maps_embed', label: 'Kode Embed Google Maps (iframe/URL)', type: 'textarea' },
-] as const
 
 export function ContactEditor({ contactInfo, canCrud, onSave }: Props) {
   const [form, setForm] = useState<Record<string, string>>(() => ({

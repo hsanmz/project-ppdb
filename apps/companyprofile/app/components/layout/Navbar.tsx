@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -8,13 +8,13 @@ import { Menu, X, ChevronDown } from 'lucide-react'
 import { motion, useScroll } from 'framer-motion'
 import AnimatedLogo from '../ui/AnimatedLogo'
 import MagneticButton from '../ui/MagneticButton'
-import { useProgramLinks } from '@/app/hooks/useProgramLinks'
+import { programMenuLinks } from '@/app/lib/programs'
+import type { Program } from '@/app/lib/types'
 import { useBrand } from '@repo/ui'
 
 interface NavChild {
   href: string
   label: string
-  programKey?: string
 }
 
 interface NavItem {
@@ -25,7 +25,9 @@ interface NavItem {
   children?: NavChild[]
 }
 
-const navItems: NavItem[] = [
+// Isi dropdown "Program" TIDAK ditulis di sini: dibangun dari data CMS
+// (`programMenuLinks`), dengan daftar bawaan hanya sebagai cadangan.
+const BASE_NAV_ITEMS: NavItem[] = [
   { key: 'home', href: '/', label: 'Beranda', dropdown: false },
   {
     key: 'about', href: '/about', label: 'Tentang', dropdown: true,
@@ -40,30 +42,32 @@ const navItems: NavItem[] = [
   },
   {
     key: 'programs', href: '/programs', label: 'Program', dropdown: true,
-    children: [
-      { href: '/programs/tahfidz', label: 'Tahfidz Al-Quran', programKey: 'tahfidz' },
-      { href: '/programs/digital', label: 'Teknologi Digital', programKey: 'digital' },
-      { href: '/programs/bilingual', label: 'Program Bilingual', programKey: 'bilingual' },
-      { href: '/programs/leadership', label: 'Akademi Kepemimpinan', programKey: 'leadership' },
-    ],
+    // children diisi dari CMS di dalam komponen (lihat `navItems`).
+    children: [],
   },
   { key: 'ppdb', href: '/ppdb', label: 'PPDB', dropdown: false },
   { key: 'news', href: '/news', label: 'Berita', dropdown: false },
   { key: 'contact', href: '/contact', label: 'Kontak', dropdown: false },
 ]
 
-export default function Navbar() {
+export default function Navbar({ programs = [] }: { programs?: Program[] }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const { logoUrl } = useBrand(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-  const { hrefFor } = useProgramLinks()
   const pathname = usePathname()
   const dropdownTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { scrollYProgress } = useScroll()
 
-  const childHref = (child: NavChild) => (child.programKey ? hrefFor(child.programKey) : child.href)
+  // Dropdown "Program" mengikuti data CMS; item lain tetap statis.
+  const navItems = useMemo<NavItem[]>(
+    () =>
+      BASE_NAV_ITEMS.map((item) =>
+        item.key === 'programs' ? { ...item, children: programMenuLinks(programs) } : item,
+      ),
+    [programs],
+  )
 
   // Sync state with pathname change during rendering instead of useEffect to avoid cascading render lint warning
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -108,7 +112,6 @@ export default function Navbar() {
     if (dropdownTimer.current) clearTimeout(dropdownTimer.current)
   }
 
-  const isHome = pathname === '/'
   const isTransparent = false // Disabled so the navbar stays a solid white box at the top
 
   return (
@@ -197,8 +200,8 @@ export default function Navbar() {
                     {item.children?.map((child) => (
                       <Link
                         key={child.href}
-                        href={childHref(child)}
-                        onClick={(e) => handleNavClick(e, childHref(child))}
+                        href={child.href}
+                        onClick={(e) => handleNavClick(e, child.href)}
                         className="block px-5 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
                       >
                         {child.label}
@@ -268,9 +271,9 @@ export default function Navbar() {
                       {item.children?.map((child) => (
                         <Link
                           key={child.href}
-                          href={childHref(child)}
+                          href={child.href}
                           onClick={(e) => {
-                            handleNavClick(e, childHref(child))
+                            handleNavClick(e, child.href)
                           }}
                           className="block py-3 text-sm md:text-base text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors font-medium"
                         >

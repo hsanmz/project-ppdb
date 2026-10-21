@@ -8,6 +8,7 @@ trail, and the SSE change payload.
 Runs against the throwaway SQLite database bootstrapped by `tests/conftest.py`.
 """
 
+import json
 from collections.abc import Generator
 from typing import Any, cast
 
@@ -618,3 +619,316 @@ def test_list_strips_heavy_content(cp: TestClient) -> None:
         assert "excerpt" in row["content"]
     finally:
         cp.delete(f"/companyprofile/news/{nid}")
+
+
+# --------------------------------------------------------------------------
+# PPDB landing content (jalur, pillars, steps, teks & CTA singleton)
+# --------------------------------------------------------------------------
+
+
+def test_ppdb_landing_content_is_seeded(cp: TestClient) -> None:
+    """Migrasi 0042 menyemai konten awal supaya halaman publik tidak kosong."""
+    minimums = {
+        "ppdb-jalur": 2,
+        "ppdb-pillars": 4,
+        "ppdb-steps": 4,
+        "ppdb-copy": 1,
+    }
+    for entity, minimum in minimums.items():
+        resp = cp.get(f"/companyprofile/{entity}")
+        assert resp.status_code == 200, resp.text
+        rows = cast(list[dict[str, Any]], resp.json())
+        assert len(rows) >= minimum, (entity, len(rows))
+
+
+def test_ppdb_step_crud_lifecycle(cp: TestClient) -> None:
+    created = cp.post(
+        "/companyprofile/ppdb-steps",
+        json={"content": json.dumps({"order": 9, "title": "Uji Langkah"})},
+    )
+    assert created.status_code == 200, created.text
+    rid = cast(dict[str, Any], created.json())["id"]
+    try:
+        listed = cp.get("/companyprofile/ppdb-steps").json()
+        row = next(r for r in listed if r["id"] == rid)
+        # The list view must keep the editable content for the admin table.
+        assert json.loads(row["content"])["title"] == "Uji Langkah"
+
+        updated = cp.put(
+            f"/companyprofile/ppdb-steps/{rid}",
+            json={"content": json.dumps({"title": "Uji Langkah 2"})},
+        )
+        assert updated.status_code == 200, updated.text
+        assert json.loads(updated.json()["content"])["title"] == "Uji Langkah 2"
+    finally:
+        assert cp.delete(f"/companyprofile/ppdb-steps/{rid}").status_code == 200
+
+
+def test_ppdb_jalur_accepts_icon_column(cp: TestClient) -> None:
+    created = cp.post(
+        "/companyprofile/ppdb-jalur",
+        json={"icon": "Award", "content": json.dumps({"title": "Jalur Uji"})},
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["icon"] == "Award"
+    finally:
+        cp.delete(f"/companyprofile/ppdb-jalur/{body['id']}")
+
+
+def test_ppdb_copy_rejects_second_row(cp: TestClient) -> None:
+    """`ppdb-copy` adalah singleton: halaman publik membaca satu sumber teks."""
+    resp = cp.post(
+        "/companyprofile/ppdb-copy",
+        json={"content": json.dumps({"cta_title": "Duplikat"})},
+    )
+    assert resp.status_code == 409, resp.text
+    assert "already has a row" in resp.text
+
+
+def test_ppdb_copy_row_can_be_edited_and_restored(cp: TestClient) -> None:
+    rows = cast(list[dict[str, Any]], cp.get("/companyprofile/ppdb-copy").json())
+    assert rows, "seed copy row missing"
+    row = rows[0]
+    original = row["content"]
+    try:
+        updated = cp.put(
+            f"/companyprofile/ppdb-copy/{row['id']}",
+            json={"content": json.dumps({"cta_title": "Judul Uji"})},
+        )
+        assert updated.status_code == 200, updated.text
+        assert json.loads(updated.json()["content"])["cta_title"] == "Judul Uji"
+    finally:
+        cp.put(f"/companyprofile/ppdb-copy/{row['id']}", json={"content": original})
+
+
+def test_ppdb_entities_reject_unknown_fields(cp: TestClient) -> None:
+    resp = cp.post("/companyprofile/ppdb-steps", json={"slug": "x"})
+    assert resp.status_code == 422, resp.text
+    assert "slug" in resp.text
+    # Tab PPDB tidak punya unggahan gambar; kolom `image` bukan field yang bisa ditulis.
+    resp_image = cp.post("/companyprofile/ppdb-jalur", json={"image": "a.png"})
+    assert resp_image.status_code == 422, resp_image.text
+    assert "image" in resp_image.text
+
+
+# --------------------------------------------------------------------------
+# Hero beranda (slide: teks, gambar, tombol)
+# --------------------------------------------------------------------------
+
+
+def test_hero_slides_are_seeded_and_ordered(cp: TestClient) -> None:
+    """Migrasi 0045 menyemai 3 slide hero bawaan; urutannya `order` ASC.
+
+    Kontrak lama ("kosong sampai panitia menambah slide") berlaku sejak
+    migrasi 0043 yang sengaja tidak menyemai. Begitu seed ditambahkan,
+    kontraknya yang berubah -- bukan sebaliknya. Slide hasil seed tetap
+    boleh diganti/dihapus panitia lewat tab "Hero Beranda".
+    """
+    resp = cp.get("/companyprofile/hero-slides")
+    assert resp.status_code == 200, resp.text
+    rows = cast(list[dict[str, Any]], resp.json())
+
+    seeded = [r for r in rows if str(r["id"]).startswith("heroslide-")]
+    assert len(seeded) == 3, "migrasi 0045 seharusnya menyemai 3 slide hero"
+
+    orders = [r["order"] for r in seeded]
+    assert orders == sorted(orders), "list harus mengikuti `order` ASC"
+
+
+def test_hero_slide_crud_lifecycle(cp: TestClient) -> None:
+    created = cp.post(
+        "/companyprofile/hero-slides",
+        json={
+            "order": 3,
+            "image": "https://res.cloudinary.com/demo/image/upload/hero.png",
+            "content": json.dumps(
+                {
+                    "label": "PENERIMAAN 2026",
+                    "title": "Pesantren\nTahfidz\nDigital",
+                    "subtitle": "Subjudul uji",
+                    "button_label": "Daftar",
+                    "button_href": "/ppdb",
+                }
+            ),
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    rid = body["id"]
+    try:
+        assert body["order"] == 3
+        assert body["image"].endswith("hero.png")
+
+        listed = cast(list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json())
+        row = next(r for r in listed if r["id"] == rid)
+        # List view must keep the editable content for the admin table.
+        assert json.loads(row["content"])["title"] == "Pesantren\nTahfidz\nDigital"
+
+        updated = cp.put(
+            f"/companyprofile/hero-slides/{rid}",
+            json={"content": json.dumps({"title": "Judul Baru"})},
+        )
+        assert updated.status_code == 200, updated.text
+        assert json.loads(updated.json()["content"])["title"] == "Judul Baru"
+    finally:
+        assert cp.delete(f"/companyprofile/hero-slides/{rid}").status_code == 200
+
+
+def test_hero_slide_order_column_defaults_when_omitted(cp: TestClient) -> None:
+    created = cp.post(
+        "/companyprofile/hero-slides",
+        json={"content": json.dumps({"title": "Tanpa Urutan"})},
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["order"] == 0
+    finally:
+        cp.delete(f"/companyprofile/hero-slides/{body['id']}")
+
+
+def test_hero_slides_list_is_ordered_by_order_column(cp: TestClient) -> None:
+    """Kontrol geser publik mengikuti `order` ASC, bukan urutan insert."""
+    ids: list[str] = []
+    try:
+        for order, title in ((2, "Slide Kedua"), (1, "Slide Pertama")):
+            resp = cp.post(
+                "/companyprofile/hero-slides",
+                json={"order": order, "content": json.dumps({"title": title})},
+            )
+            assert resp.status_code == 200, resp.text
+            ids.append(cast(dict[str, Any], resp.json())["id"])
+
+        listed = cast(list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json())
+        mine = [r for r in listed if r["id"] in ids]
+        assert [json.loads(r["content"])["title"] for r in mine] == [
+            "Slide Pertama",
+            "Slide Kedua",
+        ]
+    finally:
+        for rid in ids:
+            cp.delete(f"/companyprofile/hero-slides/{rid}")
+
+
+def test_hero_slide_requires_content_and_rejects_unknown_fields(cp: TestClient) -> None:
+    # `content` wajib (menampung judul/subjudul/tombol).
+    assert cp.post("/companyprofile/hero-slides", json={}).status_code == 422
+    resp = cp.post(
+        "/companyprofile/hero-slides",
+        json={"content": json.dumps({"title": "x"}), "slug": "nope"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "slug" in resp.text
+
+
+# --------------------------------------------------------------------------
+# Urutan tampil program (kolom `order`, migrasi 0044)
+# --------------------------------------------------------------------------
+
+
+def test_program_accepts_order_column(cp: TestClient) -> None:
+    """`order` harus diterima sebagai kolom, bukan ditolak sebagai field asing."""
+    created = cp.post(
+        "/companyprofile/programs",
+        json={"slug": "program-urutan", "icon": "book-quran", "order": 7},
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["order"] == 7
+        # Nilai dari form adalah string; harus dikonversi router, bukan error.
+        updated = cp.put(
+            f"/companyprofile/programs/{body['id']}", json={"order": "12"}
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["order"] == 12
+    finally:
+        cp.delete(f"/companyprofile/programs/{body['id']}")
+
+
+def test_program_order_column_defaults_when_omitted(cp: TestClient) -> None:
+    created = cp.post("/companyprofile/programs", json={"slug": "program-tanpa-urutan"})
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["order"] == 0
+    finally:
+        cp.delete(f"/companyprofile/programs/{body['id']}")
+
+
+def test_programs_list_is_ordered_by_order_column(cp: TestClient) -> None:
+    """Menu Program di navbar/footer mengikuti `order` ASC, bukan urutan insert.
+
+    Sebelum migrasi 0044 urutannya mengikuti PK UUID (acak), sehingga panitia
+    tidak bisa mengatur susunan menu.
+    """
+    ids: list[str] = []
+    try:
+        for order, slug in ((2, "program-kedua"), (1, "program-pertama")):
+            resp = cp.post(
+                "/companyprofile/programs",
+                json={"slug": slug, "order": order},
+            )
+            assert resp.status_code == 200, resp.text
+            ids.append(cast(dict[str, Any], resp.json())["id"])
+
+        listed = cast(list[dict[str, Any]], cp.get("/companyprofile/programs").json())
+        mine = [r for r in listed if r["id"] in ids]
+        assert [r["slug"] for r in mine] == ["program-pertama", "program-kedua"]
+    finally:
+        for rid in ids:
+            cp.delete(f"/companyprofile/programs/{rid}")
+
+
+# --------------------------------------------------------------------------
+# Urutan tampil testimoni (kolom `order`)
+# --------------------------------------------------------------------------
+
+
+def test_testimonial_accepts_order_column(cp: TestClient) -> None:
+    """`order` harus diterima sebagai kolom, bukan ditolak sebagai field asing."""
+    created = cp.post(
+        "/companyprofile/testimonials",
+        json={"name": "Wali Uji", "child": "Anak Uji", "order": 3},
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["order"] == 3
+        updated = cp.put(
+            f"/companyprofile/testimonials/{body['id']}", json={"order": "7"}
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["order"] == 7
+    finally:
+        cp.delete(f"/companyprofile/testimonials/{body['id']}")
+
+
+def test_testimonials_list_is_ordered_by_order_column(cp: TestClient) -> None:
+    """List endpoint harus mengembalikan testimoni urut `order` ASC.
+
+    Carousel di beranda memang mengurutkan sendiri di sisi klien, tapi
+    konsumen API lain (termasuk tabel dashboard) mengandalkan urutan dari
+    server. Tanpa `ORDER BY`, MySQL mengembalikan baris dalam urutan yang
+    tidak dijamin.
+    """
+    ids: list[str] = []
+    try:
+        for order, name in ((2, "Wali Kedua"), (1, "Wali Pertama")):
+            resp = cp.post(
+                "/companyprofile/testimonials",
+                json={"name": name, "child": "Anak", "order": order},
+            )
+            assert resp.status_code == 200, resp.text
+            ids.append(cast(dict[str, Any], resp.json())["id"])
+
+        listed = cast(
+            list[dict[str, Any]], cp.get("/companyprofile/testimonials").json()
+        )
+        mine = [r for r in listed if r["id"] in ids]
+        assert [r["name"] for r in mine] == ["Wali Pertama", "Wali Kedua"]
+    finally:
+        for rid in ids:
+            cp.delete(f"/companyprofile/testimonials/{rid}")

@@ -4,15 +4,17 @@ import LoaderScreen from "@/app/components/ui/LoaderScreen"
 import SupportFabInit from "@/app/components/ui/SupportFabInit"
 import PageTransition from "@/app/components/ui/PageTransition"
 import RealtimeWatcher from "@/app/components/ui/RealtimeWatcher"
-import { getSettings } from "@/app/lib/api"
+import { getProgramsCached, getSettings } from "@/app/lib/api"
 
 export default async function MainLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // Try to fetch logoUrl on server side if possible, or just let client handle it?
-  // Since it's a server component we can fetch it. But wait, `HeroLoader` can accept logoUrl.
-  // Actually, wait, HeroLoader doesn't fetch internally anymore! It just takes `logoUrl`.
-  const settings = await getSettings().catch(() => [])
+  // Settings (logo) dan daftar program dipakai Navbar/Footer. Diambil di server
+  // agar menu "Program" langsung mengikuti CMS tanpa fetch dari browser.
+  const [settings, programs] = await Promise.all([
+    getSettings().catch(() => []),
+    getProgramsCached().catch(() => []),
+  ])
   const logoUrl = settings.find((s) => s.key === 'logo')?.value || settings.find((s) => s.key === 'favicon')?.value || undefined
 
   return (
@@ -20,11 +22,11 @@ export default async function MainLayout({
       <RealtimeWatcher module="companyprofile" />
       <LoaderScreen logoUrl={logoUrl} />
       <SupportFabInit />
-      <Navbar />
+      <Navbar programs={programs} />
       <main className="flex-1">
         <PageTransition>{children}</PageTransition>
       </main>
-      <Footer />
+      <Footer programs={programs} />
     </>
   )
 }

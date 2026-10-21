@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { X, Upload, Link2 } from 'lucide-react'
+import { X, Upload, Link2, AlertTriangle } from 'lucide-react'
 import { getMe, updateProfile, uploadImage } from '@/app/lib/api'
+import { isFormDirty, UNSAVED_CHANGES_CONFIRM } from '@/app/lib/form-dirty'
 import { toast } from './ui/AdminToast'
+import { confirm } from './ui/AdminConfirm'
 
 const ALLOWED_AVATAR_DOMAINS = [
   'dkynlzmpwndadmbqokry.supabase.co',
@@ -47,6 +49,14 @@ export default function ProfileModal({ open, onClose }: Props) {
   const [isSuper, setIsSuper] = useState(false)
   const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload')
   const [form, setForm] = useState({ username: '', email: '', full_name: '', avatar_url: '', old_password: '', new_password: '', confirm_password: '' })
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  // Baseline form diisi bersamaan dengan form itu sendiri setelah profil
+  // selesai dimuat. Tanpa ini, isDirty akan langsung true begitu `getMe()`
+  // mengisi form — padahal admin belum menyentuh apa pun. State (bukan ref)
+  // karena nilainya dibaca saat render.
+  const [baseline, setBaseline] = useState<typeof form | null>(null)
+  const isDirty = baseline !== null && isFormDirty(form, baseline)
 
   useEffect(() => {
     if (!open) return
@@ -54,7 +64,20 @@ export default function ProfileModal({ open, onClose }: Props) {
     getMe()
       .then(u => {
         if (cancelled) return
-        setForm(prev => ({ ...prev, username: u.username, email: u.email, full_name: u.full_name, avatar_url: u.avatar_url }))
+        // Form dibangun dari nol (bukan disisipkan ke state sebelumnya) agar
+        // effect ini tidak bergantung pada `form` — isinya memang selalu
+        // data profil terbaru + password kosong.
+        const next = {
+          username: u.username ?? '',
+          email: u.email ?? '',
+          full_name: u.full_name ?? '',
+          avatar_url: u.avatar_url ?? '',
+          old_password: '',
+          new_password: '',
+          confirm_password: '',
+        }
+        setForm(next)
+        setBaseline(next)
         setIsSuper(u.user_type === 'superadmin')
       })
       .catch(() => { if (!cancelled) toast('error', 'Gagal memuat profil') })
@@ -66,6 +89,15 @@ export default function ProfileModal({ open, onClose }: Props) {
     return e instanceof Error ? e.message : 'Terjadi kesalahan'
   }
 
+  function clearFieldError(name: string) {
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
+  }
+
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -73,6 +105,8 @@ export default function ProfileModal({ open, onClose }: Props) {
     try {
       const url = await uploadImage(file)
       setForm(p => ({ ...p, avatar_url: url }))
+      // Avatar baru tersimpan ke server saat tombol Simpan ditekan.
+      toast('success', 'Avatar diunggah — tekan Simpan untuk menyimpan')
     } catch (e) {
       toast('error', 'Upload gagal: ' + errorMessage(e))
     } finally {
@@ -80,13 +114,32 @@ export default function ProfileModal({ open, onClose }: Props) {
     }
   }
 
+  /** Tutup modal, tapi konfirmasi dulu kalau ada isian yang belum disimpan. */
+  async function requestClose() {
+    if (saving) return
+    if (!isDirty) {
+      onClose()
+      return
+    }
+    const discard = await confirm(UNSAVED_CHANGES_CONFIRM)
+    if (discard) onClose()
+  }
+
   async function handleSave() {
-    if (!form.username.trim() || !form.full_name.trim()) {
-      toast('error', 'Username dan Nama Lengkap harus diisi'); return
-    }
+    const errors: Record<string, string> = {}
+    if (!form.username.trim()) errors.username = 'Username wajib diisi'
+    if (!form.full_name.trim()) errors.full_name = 'Nama lengkap wajib diisi'
     if (form.new_password && form.new_password !== form.confirm_password) {
-      toast('error', 'Password baru tidak cocok'); return
+      errors.confirm_password = 'Konfirmasi password tidak cocok'
     }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      const firstInvalid = Object.keys(errors)[0]
+      document.getElementById(`profile-${firstInvalid}`)?.focus()
+      toast('error', 'Periksa lagi kolom yang ditandai merah.')
+      return
+    }
+    setFieldErrors({})
     setSaving(true)
     try {
       const data: Record<string, string> = {}
@@ -113,7 +166,7 @@ export default function ProfileModal({ open, onClose }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(val) => { if (!val) onClose() }}>
+    <Dialog open={open} onOpenChange={(val) => { if (!val) void requestClose() }}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Profile Admin</DialogTitle>
@@ -186,16 +239,30 @@ export default function ProfileModal({ open, onClose }: Props) {
               <hr className="border-border" />
 
               <div className="space-y-1.5">
-                <Label>Username <span className="text-red-500">*</span></Label>
-                <Input type="text" maxLength={100} value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} />
+                <Label htmlFor="profile-username">Username <span className="text-red-500">*</span></Label>
+                <Input
+                  id="profile-username"
+                  type="text"
+                  maxLength={100}
+                  value={form.username}
+                  error={fieldErrors.username}
+                  onChange={e => { setForm(p => ({ ...p, username: e.target.value })); clearFieldError('username') }}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label>Nama Lengkap <span className="text-red-500">*</span></Label>
-                <Input type="text" maxLength={255} value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} />
+                <Label htmlFor="profile-full_name">Nama Lengkap <span className="text-red-500">*</span></Label>
+                <Input
+                  id="profile-full_name"
+                  type="text"
+                  maxLength={255}
+                  value={form.full_name}
+                  error={fieldErrors.full_name}
+                  onChange={e => { setForm(p => ({ ...p, full_name: e.target.value })); clearFieldError('full_name') }}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label>Email {!isSuper && <span className="font-normal text-muted-foreground">(hanya superadmin)</span>}</Label>
-                <Input type="email" maxLength={255} value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} readOnly={!isSuper}
+                <Label htmlFor="profile-email">Email {!isSuper && <span className="font-normal text-muted-foreground">(hanya superadmin)</span>}</Label>
+                <Input id="profile-email" type="email" maxLength={255} value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} readOnly={!isSuper}
                   className={isSuper ? '' : 'text-muted-foreground bg-accent/50'} />
               </div>
 
@@ -203,24 +270,35 @@ export default function ProfileModal({ open, onClose }: Props) {
 
               <p className="text-xs font-semibold text-muted-foreground">Ganti Password (opsional)</p>
               <div className="space-y-1.5">
-                <Label>Password Lama</Label>
-                <Input type="password" maxLength={128} value={form.old_password} onChange={e => setForm(p => ({ ...p, old_password: e.target.value }))} autoComplete="current-password" />
+                <Label htmlFor="profile-old_password">Password Lama</Label>
+                <Input id="profile-old_password" type="password" maxLength={128} value={form.old_password} onChange={e => setForm(p => ({ ...p, old_password: e.target.value }))} autoComplete="current-password" />
               </div>
               <div className="space-y-1.5">
-                <Label>Password Baru</Label>
-                <Input type="password" maxLength={128} value={form.new_password} onChange={e => setForm(p => ({ ...p, new_password: e.target.value }))} autoComplete="new-password" />
+                <Label htmlFor="profile-new_password">Password Baru</Label>
+                <Input id="profile-new_password" type="password" maxLength={128} value={form.new_password} onChange={e => { setForm(p => ({ ...p, new_password: e.target.value })); clearFieldError('confirm_password') }} autoComplete="new-password" />
               </div>
               <div className="space-y-1.5">
-                <Label>Konfirmasi Password Baru</Label>
-                <Input type="password" maxLength={128} value={form.confirm_password} onChange={e => setForm(p => ({ ...p, confirm_password: e.target.value }))} autoComplete="new-password" />
+                <Label htmlFor="profile-confirm_password">Konfirmasi Password Baru</Label>
+                <Input id="profile-confirm_password" type="password" maxLength={128} value={form.confirm_password} error={fieldErrors.confirm_password} onChange={e => { setForm(p => ({ ...p, confirm_password: e.target.value })); clearFieldError('confirm_password') }} autoComplete="new-password" />
               </div>
             </>
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
-          <Button onClick={handleSave} disabled={saving || loading || !form.username.trim() || !form.full_name.trim()}>
+        <DialogFooter className="items-center justify-between sm:justify-between">
+          <p className="mr-auto flex items-center gap-1.5 text-xs font-medium text-amber-600">
+            {isDirty ? (
+              <>
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Perubahan belum disimpan
+              </>
+            ) : null}
+          </p>
+          <Button variant="outline" onClick={() => void requestClose()}>Batal</Button>
+          <Button
+            onClick={handleSave}
+            disabled={saving || loading}
+          >
             {saving ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </DialogFooter>

@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import * as api from '@/app/lib/api'
 import { eventBus } from '@/app/lib/event-bus'
 import { useSSE } from '@/app/hooks/useSSE'
 import AdminToast, { toast } from '@/app/components/ui/AdminToast'
 import AdminConfirm from '@/app/components/ui/AdminConfirm'
 import {
-  Plus, Settings, LayoutDashboard, Loader2, FolderOpen,
+  Plus, Settings, LayoutDashboard, Loader2, FolderOpen, Pencil, Trash2,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import ProfileModal from '@/app/components/ProfileModal'
 import CrossTabSync from '@/app/components/CrossTabSync'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -34,11 +34,13 @@ import { SettingsEditor } from './SettingsEditor'
 import { ContactEditor } from './ContactEditor'
 import { CrudFormDialog } from './CrudFormDialog'
 import {
-  TABS, TABLE_COLS, FORM_FIELDS, CONTENT_FIELDS, truncate,
+  TABS, TABLE_COLS, FORM_FIELDS, CONTENT_FIELDS, sortRowsByOrder,
 } from './_constants'
+import type { TableColumn } from './_constants'
 import type { AdminUser, FormState, RowRecord } from './_types'
 
 const TAB_DESCRIPTIONS: Record<string, string> = {
+  hero: 'Kelola slide hero beranda (teks, gambar, dan tombol).',
   news: 'Kelola artikel, berita, dan pengumuman terbaru pesantren.',
   programs: 'Atur program pendidikan yang ditawarkan pesantren.',
   facilities: 'Kelola sarana dan prasarana yang dimiliki pesantren.',
@@ -49,19 +51,29 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
   social: 'Atur tautan media sosial resmi pesantren.',
   contact: 'Perbarui informasi kontak pesantren.',
   settings: 'Konfigurasi logo, favicon, dan pengaturan situs.',
+  'ppdb-jalur': 'Kelola kartu jalur pendaftaran di halaman PPDB.',
+  'ppdb-pillars': 'Kelola kartu pilar kurikulum di halaman PPDB.',
+  'ppdb-steps': 'Kelola langkah alur pendaftaran di halaman PPDB.',
+  'ppdb-copy': 'Teks judul seksi & banner CTA di halaman PPDB.',
 }
 
 // ─── Skeleton ───────────────────────────────────────────────
 
 function TableSkeleton() {
   return (
-    <div className="animate-pulse space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex gap-4 p-4">
-          <div className="h-4 bg-[var(--border)] rounded flex-1" />
-          <div className="h-4 bg-[var(--border)] rounded flex-1" />
-          <div className="h-4 bg-[var(--border)] rounded w-20" />
-          <div className="h-4 bg-[var(--border)] rounded w-16" />
+    <div className="animate-pulse">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-4 border-b border-[var(--border)]/50 px-5 py-4 last:border-0"
+        >
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-[var(--border)]" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3.5 w-2/5 rounded-full bg-[var(--border)]" />
+            <div className="h-2.5 w-1/4 rounded-full bg-[var(--border)]/70" />
+          </div>
+          <div className="h-6 w-20 rounded-full bg-[var(--border)]/70" />
+          <div className="h-3 w-16 rounded-full bg-[var(--border)]/70" />
         </div>
       ))}
     </div>
@@ -74,17 +86,119 @@ function CardSkeleton() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="animate-pulse bg-white/60 rounded-xl p-5 border border-[var(--border)] space-y-3"
+          className="animate-pulse space-y-3 rounded-2xl border border-[var(--border)]/70 bg-white/60 p-5"
         >
-          <div className="h-4 bg-[var(--border)] rounded w-3/4" />
-          <div className="h-3 bg-[var(--border)] rounded w-1/2" />
-          <div className="flex gap-2 mt-2">
-            <div className="h-8 bg-[var(--border)] rounded w-16" />
-            <div className="h-8 bg-[var(--border)] rounded w-16" />
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-[var(--border)]" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-3/4 rounded-full bg-[var(--border)]" />
+              <div className="h-3 w-1/2 rounded-full bg-[var(--border)]/70" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="h-8 w-20 rounded-full bg-[var(--border)]/70" />
+            <div className="h-8 w-20 rounded-full bg-[var(--border)]/70" />
           </div>
         </div>
       ))}
     </div>
+  )
+}
+
+// ─── Row renderer tabel ─────────────────────────────────────
+
+/**
+ * Nilai sel berasal dari JSON `content` (bertipe `unknown`). Koersi ke teks
+ * dengan aman: string dipakai apa adanya, angka/boolean di-string-kan, dan
+ * nilai objek/null menjadi kosong — renderer menampilkannya sebagai "—".
+ */
+function toText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+function formatDateLabel(raw: string): string {
+  if (!raw) return '—'
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return raw
+  return parsed.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/**
+ * Thumbnail baris. Sengaja memakai `<img>`, bukan next/image: URL gambar
+ * berasal dari input bebas admin, dan next/image *melempar* error untuk host
+ * yang belum terdaftar di remotePatterns — itu akan mematikan seluruh tabel.
+ * Fallback (huruf awal / ikon tab) selalu dirender di belakang gambar,
+ * sehingga aman saat URL kosong maupun gagal dimuat.
+ */
+function RowThumb({
+  url, label, icon: Icon, round,
+}: {
+  url?: string
+  label: string
+  icon: LucideIcon
+  round?: boolean
+}) {
+  const initial = label.trim().charAt(0).toUpperCase()
+  return (
+    <span
+      className={cn(
+        'relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden border border-[var(--border)]/80 bg-[var(--accent-subtle)] text-[var(--accent)]',
+        round ? 'rounded-full' : 'rounded-xl',
+      )}
+    >
+      {initial ? (
+        <span className="text-sm font-bold">{initial}</span>
+      ) : (
+        <Icon className="h-4 w-4" />
+      )}
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- URL bebas dari admin; lihat komentar fungsi.
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : null}
+    </span>
+  )
+}
+
+function TableCellValue({ col, item }: { col: TableColumn; item: RowRecord }) {
+  const value = toText(col.accessor(item)).trim()
+
+  if (col.variant === 'badge') {
+    if (!value) return <span className="text-sm text-[var(--text-muted)]">—</span>
+    return (
+      <span
+        className={cn(
+          'inline-flex max-w-[200px] items-center rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap',
+          col.tone === 'gold'
+            ? 'bg-[var(--accent-gold)]/15 text-[#9A7429]'
+            : 'bg-[var(--accent-subtle)] text-[var(--accent)]',
+        )}
+      >
+        <span className="truncate">{value}</span>
+      </span>
+    )
+  }
+
+  if (col.variant === 'date') {
+    return (
+      <span className="text-sm whitespace-nowrap text-[var(--text-secondary)] tabular-nums">
+        {formatDateLabel(value)}
+      </span>
+    )
+  }
+
+  return (
+    <span className="block max-w-[280px] truncate text-sm text-[var(--text-secondary)]" title={value || undefined}>
+      {value || '—'}
+    </span>
   )
 }
 
@@ -371,6 +485,22 @@ export default function AdminDashboard() {
 
   const activeTabDef = TABS.find((t) => t.key === activeTab)!
 
+  // Baris diurutkan sesuai sumber urutan entitas. Entitas ber-kolom `order`
+  // sudah terurut dari backend; entitas PPDB & staff menyimpan urutan di
+  // dalam JSON `content`, jadi diurutkan di sini agar baris tabel admin
+  // urutannya sama dengan urutan di situs publik.
+  const orderedItems = useMemo(
+    () => sortRowsByOrder(activeTab, items),
+    [activeTab, items],
+  )
+
+  // Kolom tabel: `title` + `subtitle` digabung jadi satu sel utama
+  // (thumbnail + judul + baris kecil), kolom sisanya dirender sesuai `variant`.
+  const tableCols = TABLE_COLS[activeTab] ?? []
+  const titleCol = tableCols.find((c) => c.variant === 'title') ?? tableCols[0]
+  const subtitleCol = tableCols.find((c) => c.variant === 'subtitle')
+  const detailCols = tableCols.filter((c) => c !== titleCol && c !== subtitleCol)
+
   const navGroups = buildAdminNavGroups(
     filteredTabs.map((t) => ({
       key: t.key,
@@ -444,7 +574,7 @@ export default function AdminDashboard() {
                     {items.length} item
                   </span>
                 )}
-                {canCrud && activeTab !== 'settings' && activeTab !== 'contact' && (
+                {canCrud && activeTab !== 'settings' && activeTab !== 'contact' && !(activeTab === 'ppdb-copy' && items.length > 0) && (
                   <button
                     onClick={openCreate}
                     className="inline-flex items-center gap-2 rounded-xl bg-white/95 hover:bg-white text-emerald-900 px-4 py-2.5 text-sm font-semibold shadow-md transition-all duration-200"
@@ -532,74 +662,120 @@ export default function AdminDashboard() {
 
           {/* Table Data */}
           {activeTab !== 'settings' && activeTab !== 'contact' && !loading && items.length > 0 && (
-            <Card className="border-border shadow-sm bg-white/60 backdrop-blur-sm overflow-hidden">
+            <Card className="overflow-hidden rounded-2xl border-border/70 bg-white/70 shadow-[0_18px_50px_-30px_rgba(26,107,71,0.35)] backdrop-blur-sm">
               <div className="overflow-x-auto no-scrollbar">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-secondary/40 hover:bg-secondary/40">
-                      {TABLE_COLS[activeTab]?.map((col) => (
+                    <TableRow className="border-b border-border/70 bg-[var(--bg-secondary)]/55 hover:bg-[var(--bg-secondary)]/55">
+                      <TableHead className="h-12 px-5 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.14em]">
+                        {titleCol?.label}
+                      </TableHead>
+                      {detailCols.map((col) => (
                         <TableHead
                           key={col.label}
-                          className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider h-11"
+                          className={cn(
+                            'h-12 px-5 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.14em]',
+                            col.variant === 'date' && 'text-right',
+                          )}
                         >
                           {col.label}
                         </TableHead>
                       ))}
                       {canCrud && (
-                        <TableHead className="text-right text-[12px] font-semibold text-muted-foreground uppercase tracking-wider h-11">
+                        <TableHead className="h-12 w-[1%] px-5 text-right text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.14em] whitespace-nowrap">
                           Aksi
                         </TableHead>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {items.map((item, idx) => (
-                      <TableRow key={item.id || item.key} className={cn('transition-colors hover:bg-primary/[0.04]', idx % 2 === 0 ? 'bg-white/40' : 'bg-transparent')}>
-                        {TABLE_COLS[activeTab]?.map((col) => (
-                          <TableCell
-                            key={col.label}
-                            className="py-3 max-w-[200px] sm:max-w-[300px] truncate text-foreground font-medium"
-                          >
-                            {truncate(col.accessor(item), 40)}
+                    {orderedItems.map((item) => {
+                      const titleValue = titleCol ? toText(titleCol.accessor(item)) : ''
+                      const subtitleValue = subtitleCol ? toText(subtitleCol.accessor(item)) : ''
+                      return (
+                        <TableRow
+                          key={item.id || item.key}
+                          className="group border-b border-border/50 transition-all duration-200 hover:bg-[var(--accent-subtle)] hover:shadow-[inset_3px_0_0_0_var(--accent)]"
+                        >
+                          <TableCell className="max-w-[320px] px-5 py-3.5 align-middle">
+                            <div className="flex items-center gap-3">
+                              <RowThumb
+                                url={typeof item.image === 'string' && item.image ? item.image : undefined}
+                                label={titleValue}
+                                icon={activeTabDef.icon}
+                                round={activeTab === 'staff'}
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[var(--text)]" title={titleValue || undefined}>
+                                  {titleValue || '—'}
+                                </p>
+                                {subtitleValue ? (
+                                  <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]" title={subtitleValue}>
+                                    {subtitleValue}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
                           </TableCell>
-                        ))}
-                        {canCrud && (
-                          <TableCell className="py-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                loading={detailLoading === item.id}
-                                onClick={() => void openEdit(item)}
-                              >
-                                Edit
-                              </Button>
-                              {activeTab !== 'contact' && (
+                          {detailCols.map((col) => (
+                            <TableCell
+                              key={col.label}
+                              className={cn('px-5 py-3.5 align-middle', col.variant === 'date' && 'text-right')}
+                            >
+                              <TableCellValue col={col} item={item} />
+                            </TableCell>
+                          ))}
+                          {canCrud && (
+                            <TableCell className="w-[1%] px-5 py-3.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <Button
-                                  variant="danger"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={detailLoading === item.id}
+                                  onClick={() => void openEdit(item)}
+                                  className="gap-1.5 rounded-full px-3 text-[var(--accent)] hover:bg-[var(--accent-subtle)]"
+                                >
+                                  {detailLoading === item.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Pencil className="h-3.5 w-3.5" />}
+                                  Edit
+                                </Button>
+                                {activeTab !== 'ppdb-copy' && (
+                                <Button
+                                  variant="ghost"
                                   size="sm"
                                   onClick={async () => {
                                     const { confirm } = await import(
                                       '@/app/components/ui/AdminConfirm'
                                     )
+                                    // Sebut item yang akan dihapus supaya admin
+                                    // tidak salah baris di tabel yang panjang.
+                                    const itemTitle =
+                                      toText(titleCol?.accessor(item)).trim() ||
+                                      String(item.slug || item.name || '')
                                     const ok = await confirm({
-                                      title: 'Hapus Item',
-                                      message: 'Yakin ingin menghapus item ini? Tindakan ini tidak bisa dibatalkan.',
+                                      title: `Hapus ${activeTabDef.label}`,
+                                      message: itemTitle
+                                        ? `Yakin ingin menghapus "${itemTitle}"? Tindakan ini tidak bisa dibatalkan.`
+                                        : 'Yakin ingin menghapus item ini? Tindakan ini tidak bisa dibatalkan.',
                                       confirmLabel: 'Ya, Hapus',
                                       cancelLabel: 'Batal',
                                       variant: 'danger',
                                     })
                                     if (ok) handleDelete(item)
                                   }}
+                                  className="gap-1.5 rounded-full px-3 text-red-500 hover:bg-red-50 hover:text-red-600"
                                 >
+                                  <Trash2 className="h-3.5 w-3.5" />
                                   Hapus
                                 </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -608,8 +784,13 @@ export default function AdminDashboard() {
 
           {/* Load more */}
           {activeTab !== 'settings' && activeTab !== 'contact' && !loading && hasMore && (
-            <div className="flex justify-center mt-6 mb-2">
-              <Button variant="outline" onClick={loadMore} disabled={loadingMore} className="gap-2">
+            <div className="mt-6 mb-2 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="gap-2 rounded-full px-6"
+              >
                 <Loader2 className={`w-4 h-4 ${loadingMore ? 'animate-spin' : ''}`} />
                 {loadingMore ? 'Memuat...' : 'Muat Lebih Banyak'}
               </Button>

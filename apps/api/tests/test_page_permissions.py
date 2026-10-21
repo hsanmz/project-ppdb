@@ -29,6 +29,7 @@ PPDB_KEYS = {
     "notifications",
 }
 CP_KEYS = {
+    "hero",
     "news",
     "programs",
     "facilities",
@@ -39,6 +40,10 @@ CP_KEYS = {
     "social",
     "contact",
     "settings",
+    "ppdb-jalur",
+    "ppdb-pillars",
+    "ppdb-steps",
+    "ppdb-copy",
 }
 LEGACY_KEYS = {
     "admin-dashboard",

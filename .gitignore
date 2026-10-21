@@ -80,3 +80,18 @@ ehthumbs.db
 # Local test runs & screenshots
 .playwright-mcp/
 /*.png
+
+# Model 3D percobaan yang tidak di-load halaman mana pun.
+# Total ~270 MB untuk file yang tidak pernah dipakai runtime — jangan di-commit.
+apps/companyprofile/public/models/model-promt*.glb
+apps/companyprofile/public/models/rigged-model.glb
+# Duplikat lama; hero aktif memakai rigged-model-clean.glb (ada fallback CDN).
+apps/companyprofile/public/models/wisudawan-3d.glb
+apps/companyprofile/public/models/*.backup
+apps/companyprofile/*.glb.backup
+
+# Cadangan file sumber
+apps/companyprofile/components/ui/*.bak
+
+# Skrip debug sementara (membaca .env, tidak untuk repo)
+_tmp_proc.py

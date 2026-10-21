@@ -4,13 +4,6 @@ import { useEffect, useRef } from 'react'
 import { gsap } from '@/app/lib/gsap'
 import { prefersReducedMotion } from '@/app/lib/motion'
 
-const STATS = [
-  { value: 350, suffix: '+', label: 'Santri Aktif' },
-  { value: 40, suffix: '+', label: 'Guru & Staff' },
-  { value: 30, suffix: ' Juz', label: 'Hafalan Al-Quran' },
-  { value: 15, suffix: '+', label: 'Ekstrakurikuler' },
-]
-
 export default function StatsSection({ settings = {} }: { settings?: Record<string, string> }) {
   const displayStats = [
     { value: Number(settings.stat_students) || 350, suffix: '+', label: 'Santri Aktif' },

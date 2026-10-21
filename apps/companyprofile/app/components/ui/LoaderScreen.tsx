@@ -27,7 +27,10 @@ export default function LoaderScreen({ logoUrl }: { logoUrl?: string }) {
       aria-live="polite"
       aria-hidden={phase === 'hide'}
     >
-      {logoUrl ? <img src={logoUrl} alt="" className="mb-2 h-14 max-w-40 object-contain" /> : null}
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- logoUrl berasal dari CMS (URL bebas dari admin); next/image melempar error untuk host yang belum terdaftar di remotePatterns.
+        <img src={logoUrl} alt="" className="mb-2 h-14 max-w-40 object-contain" />
+      ) : null}
       <span className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-700/20 border-t-emerald-700" aria-hidden="true" />
       <span className="text-sm text-slate-600">Memuat halaman...</span>
     </div>

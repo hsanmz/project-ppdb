@@ -22,7 +22,7 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
 - **Admin (`app/admin/`)**:
   - `/admin/login` — Redirect shim ke `/auth/login`
   - `/admin/overview` — Dashboard overview page (stats + per-section links into `/admin/dashboard`).
-  - `/admin/dashboard` — Main CRUD dashboard (10 tabs, supports deep-link `?tab=...`).
+  - `/admin/dashboard` — Main CRUD dashboard (15 tabs, supports deep-link `?tab=...`). Tab `hero` mengelola slide hero beranda (`hero-slides`). Grup `PPDB` (jalur/pillars/steps/copy) memakai entitas generik yang sama; `ppdb-copy` singleton (tanpa tombol Buat Baru/Hapus).
   - `/admin` — Redirects to `/admin/overview` if `admin_user` exists in localStorage, else `/auth/login`.
 
 ## Key Conventions
@@ -30,6 +30,8 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
 - **Layout**: Root `app/layout.tsx` is minimal (sets up `html`, `body`, fonts, and `Providers`).
 - **Error Pages**: Custom `error.tsx`, `not-found.tsx`, and `global-error.tsx`.
 - **Path Alias**: All imports use the `@/...` path alias (e.g., `@/app/...`).
+- **Menu Program (Navbar & Footer)**: Isi dropdown "Program" TIDAK boleh di-hardcode. `app/(main)/layout.tsx` mengambil `getProgramsCached()` lalu meneruskannya sebagai prop `programs` ke `<Navbar>`/`<Footer>`, yang merender `programMenuLinks()` (label = judul program, tautan = `/programs/{slug}`). Daftar bawaan di `app/lib/programs.ts` hanya dipakai sebagai cadangan saat API kosong/gagal. Tambah/ubah/hapus program di backoffice langsung mengubah menu (fetch di-cache 60 detik). Urutan menu & daftar program mengikuti kolom `order` (field "Urutan Tampilan" di tab Program, ASC) — migrasi `0044`; tanpa kolom itu urutannya mengikuti PK UUID (acak).
+- **Halaman Detail Program (`/programs/[slug]`)**: Hero menampilkan judul, tagline, breadcrumb, dan chip Durasi/Tingkat — keduanya hanya sekali di sini, jangan diulang di kolom isi. Sidebar memuat CTA ("Daftar Sekarang"/"Ajukan Pertanyaan") dan daftar "Program Lainnya" yang dibangun `siblingProgramLinks(programs, currentSlug)` (semua program selain yang dibuka; tanpa daftar cadangan bawaan supaya tidak menautkan halaman yang sedang dibuka). `page.tsx` mengambil daftar sekali via `getProgramsCached()` lalu memakai `fallbackPrograms()` bila CMS kosong/gagal. Kartu isi (Keunggulan/Kurikulum/Hasil) memakai `sm:grid-cols-2 xl:grid-cols-3` agar daftar 3 item rapi dalam satu baris di desktop, dan paragraf "Gambaran Program" dibatasi `max-w-prose`.
 
 ## Backend & API
 - **Backend Architecture**: FastAPI monolithic backend (located in `../api/`).
@@ -43,7 +45,7 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
 - **Real-time**: `useSSE.ts` uses `EventSource` to subscribe to `/companyprofile/events` (Server-Side Events from FastAPI).
 
 ## Admin Dashboard
-- **10 CRUD Tabs**: news, programs, facilities, staff, achievements, gallery, testimonials, social, contact, and settings.
+- **11 CRUD Tabs**: hero, news, programs, facilities, staff, achievements, gallery, testimonials, social, contact, and settings.
 - **File Uploads**: Files are uploaded via `/companyprofile/upload` (forwarded to Cloudinary by backend).
 
 ### ATURAN WAJIB: Access Control & Permissions

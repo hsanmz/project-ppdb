@@ -5,19 +5,92 @@ import Link from 'next/link'
 import {
   GraduationCap,
   BookOpen,
+  Globe,
   Sparkles,
   ArrowRight,
   Phone,
+  Rocket,
   ShieldCheck,
+  Target,
   Award,
   CheckCircle2,
   Laptop,
-  Users
+  Users,
+  type LucideIcon,
 } from 'lucide-react'
 
 import { useActivePpdbWave } from '@/app/hooks/usePpdbWave'
+import { usePpdbContent } from '@/app/hooks/usePpdbContent'
 import { buildSchedule } from '@/app/lib/ppdb'
+import {
+  pickAccent,
+  resolveIconName,
+  type AccentKey,
+  type PpdbIconName,
+} from '@/app/lib/ppdbContent'
 import ShapeDividerDiagonal from '@/app/components/ui/ShapeDividerDiagonal'
+
+// Icon dinamis dari CMS (nama lucide di kolom `icon`). Data yang tipenya salah
+// jatuh ke Sparkles lewat `resolveIconName`.
+const ICON_MAP: Record<PpdbIconName, LucideIcon> = {
+  Award,
+  GraduationCap,
+  BookOpen,
+  Laptop,
+  Users,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Rocket,
+  Globe,
+}
+
+// Palet aksen kartu jalur. Dipakai lewat `pickAccent` (nama tak dikenal →
+// emerald) supaya warna tidak pernah jadi class Tailwind dinamis.
+// Sengaja tanpa varian `dark:` — situs ini tema terang (tidak ada override
+// variabel di prefers-color-scheme), jadi `dark:` hanya membuat teks pucat
+// bagi pengunjung yang OS-nya mode gelap.
+const ACCENT_STYLES: Record<
+  AccentKey,
+  { chip: string; kicker: string; check: string; link: string }
+> = {
+  emerald: {
+    chip: 'bg-emerald-600/10 text-emerald-700',
+    kicker: 'text-emerald-700',
+    check: 'text-emerald-600',
+    link: 'text-emerald-800 hover:text-emerald-900',
+  },
+  amber: {
+    chip: 'bg-amber-500/10 text-amber-600',
+    kicker: 'text-amber-600',
+    check: 'text-amber-500',
+    link: 'text-amber-700 hover:text-amber-800',
+  },
+  sky: {
+    chip: 'bg-sky-500/10 text-sky-600',
+    kicker: 'text-sky-600',
+    check: 'text-sky-500',
+    link: 'text-sky-700 hover:text-sky-800',
+  },
+  violet: {
+    chip: 'bg-violet-500/10 text-violet-600',
+    kicker: 'text-violet-600',
+    check: 'text-violet-500',
+    link: 'text-violet-700 hover:text-violet-800',
+  },
+  rose: {
+    chip: 'bg-rose-500/10 text-rose-600',
+    kicker: 'text-rose-600',
+    check: 'text-rose-500',
+    link: 'text-rose-700 hover:text-rose-800',
+  },
+  teal: {
+    chip: 'bg-teal-500/10 text-teal-600',
+    kicker: 'text-teal-600',
+    check: 'text-teal-500',
+    link: 'text-teal-700 hover:text-teal-800',
+  },
+}
 
 // Load Three.js 3D Hero dynamically with SSR disabled to prevent hydration/canvas errors
 const PPDBHero = dynamic(
@@ -38,12 +111,24 @@ const PPDBHero = dynamic(
 export default function PPDBPage() {
   const wave = useActivePpdbWave()
   const ppdb = buildSchedule(wave)
+  const content = usePpdbContent()
 
   return (
     <div className="w-full min-h-screen bg-[var(--bg)] text-[var(--text)]">
       {/* 3D Interactive Planet & Courier Hero */}
       <section className="relative w-full">
-        <PPDBHero theme="auto" academicYear={ppdb.academicYear} />
+        {/* Karakter wisudawan ugya graduate.glb: biarkan tekstur asli (toga hitam
+            trim emas) — jangan tint, warna default kurir akan menimpa toga */}
+        <PPDBHero
+          theme="auto"
+          academicYear={ppdb.academicYear}
+          copy={content.copy}
+          shirtColor={null}
+          pantsColor={null}
+          showBag={false}
+          showStrap={false}
+          showCap={true}
+        />
       </section>
 
       {/* Tear-off tipis memisahkan hero 3D dari section info. Sengaja tanpa
@@ -52,200 +137,178 @@ export default function PPDBPage() {
         <ShapeDividerDiagonal fill="var(--bg-secondary)" />
       </div>
 
-      {/* Info Section: Jalur & Program PPDB */}
-      <section id="info-section" className="pt-28 md:pt-32 pb-20 md:pb-28 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold text-xs tracking-wider uppercase mb-4 border border-emerald-500/20">
-            <Sparkles className="w-4 h-4 text-emerald-600" />
-            {ppdb.academicYear ? `Tahun Ajaran ${ppdb.academicYear}` : 'PPDB'}
-          </div>
-          <h2 className="font-[var(--font-display)] text-3xl md:text-5xl font-bold tracking-tight mb-5 text-emerald-950 dark:text-emerald-100">
-            Jalur Pendaftaran Santri Baru
+      {/* Info Section: Jalur, Kurikulum, Alur & CTA — seluruh isinya berasal
+          dari CMS (`/companyprofile/ppdb-*`) dengan fallback default identik. */}
+      <section
+        id="info-section"
+        className="pt-28 md:pt-32 pb-20 md:pb-28 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"
+      >
+        {/* Heading Jalur */}
+        <div className="text-center max-w-3xl mx-auto mb-14 md:mb-16">
+          <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#D4A853]" aria-hidden />
+            {ppdb.academicYear ? `PPDB ${ppdb.academicYear}` : 'PPDB'}
+          </span>
+          <h2 className="mt-4 font-heading! text-3xl md:text-5xl font-bold tracking-tight text-emerald-950">
+            {content.copy.jalur_title}
           </h2>
-          <p className="text-[var(--text-secondary)] text-base md:text-lg leading-relaxed">
-            Pilihlah jalur penerimaan yang sesuai dengan minat dan potensi ananda untuk bergabung bersama Pesantren Tahfidz Qur&apos;an dan Digital Ar-Rahman.
+          <p className="mt-4 text-[var(--text-secondary)] text-base md:text-lg leading-relaxed">
+            {content.copy.jalur_desc}
           </p>
         </div>
 
-        {/* 2 Jalur Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-20">
-          {/* Jalur Prestasi */}
-          <div className="group relative rounded-3xl bg-[var(--bg-elevated)] border border-[var(--color-border)] p-8 md:p-10 shadow-sm hover:shadow-xl hover:border-emerald-600/40 transition-all duration-300 flex flex-col justify-between">
-            <div>
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Award className="w-7 h-7" />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Beasiswa Penuh & Parsial
-              </span>
-              <h3 className="font-[var(--font-heading)] text-2xl font-bold mt-2 mb-3 text-[var(--text)]">
-                Jalur Prestasi Tahfidz & Sains
-              </h3>
-              <p className="text-[var(--text-secondary)] text-sm md:text-base leading-relaxed mb-6">
-                Dikhususkan bagi calon santri yang memiliki hafalan Al-Qur&apos;an minimal 5 Juz bersanad mutqin atau memiliki prestasi kejuaraan sains, robotika, dan IT tingkat regional/nasional.
-              </p>
+        {/* Kartu Jalur Pendaftaran */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+          {content.jalur.map((card) => {
+            const Icon = ICON_MAP[resolveIconName(card.icon)]
+            const accent = ACCENT_STYLES[pickAccent(card.content?.accent)]
+            return (
+              <article
+                key={card.id}
+                className="group flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--bg-elevated)] p-7 md:p-9 transition-colors duration-300 hover:border-emerald-700/30"
+              >
+                <div className="mb-6 flex items-center gap-3.5">
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.chip}`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  {card.content?.kicker && (
+                    <span
+                      className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${accent.kicker}`}
+                    >
+                      {card.content.kicker}
+                    </span>
+                  )}
+                </div>
 
-              <div className="space-y-3 mb-8">
-                {[
-                  'Bebas biaya pendaftaran dan seleksi',
-                  'Potongan uang pangkal hingga 100%',
-                  'Uji tasmi hafalan langsung dengan dewan asatidz',
-                  'Sertifikat atau piagam kejuaraan pendukung'
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+                <h3 className="font-heading! text-xl md:text-2xl font-bold text-[var(--text)]">
+                  {card.content?.title}
+                </h3>
+                <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-[var(--text-secondary)]">
+                  {card.content?.desc}
+                </p>
 
-            <Link
-              href="/contact"
-              className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-medium transition-colors shadow-sm"
-            >
-              Daftar Jalur Prestasi
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+                {(card.content?.items?.length ?? 0) > 0 && (
+                  <ul className="mt-6 space-y-3">
+                    {card.content?.items?.map((item) => (
+                      <li
+                        key={item}
+                        className="flex items-start gap-3 text-sm text-[var(--text-secondary)]"
+                      >
+                        <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${accent.check}`} />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-          {/* Jalur Reguler */}
-          <div className="group relative rounded-3xl bg-[var(--bg-elevated)] border border-[var(--color-border)] p-8 md:p-10 shadow-sm hover:shadow-xl hover:border-emerald-600/40 transition-all duration-300 flex flex-col justify-between">
-            <div>
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <GraduationCap className="w-7 h-7" />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                Seleksi Reguler Berbasis Minat
-              </span>
-              <h3 className="font-[var(--font-heading)] text-2xl font-bold mt-2 mb-3 text-[var(--text)]">
-                Jalur Reguler Terpadu
-              </h3>
-              <p className="text-[var(--text-secondary)] text-sm md:text-base leading-relaxed mb-6">
-                Terbuka bagi calon santri yang memiliki komitmen kuat dalam menghafal Al-Qur&apos;an dan belajar teknologi digital.
-              </p>
-
-              <div className="space-y-3 mb-8">
-                {[
-                  'Tes Potensi Akademik (TPA) & Baca Al-Qur&apos;an',
-                  'Wawancara kesiapan santri dan orang tua',
-                  'Observasi minat bakat teknologi digital',
-                  'Pembinaan intensif tahsin di awal masuk'
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Link
-              href="/contact"
-              className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-2xl bg-[var(--bg-secondary)] hover:bg-emerald-50 text-[var(--text)] hover:text-emerald-800 border border-[var(--color-border)] font-medium transition-colors"
-            >
-              Daftar Jalur Reguler
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+                <div className="mt-auto pt-7">
+                  <Link
+                    href={card.content?.cta_href || '/contact'}
+                    className={`inline-flex items-center gap-2 text-sm font-semibold ${accent.link}`}
+                  >
+                    {card.content?.cta_label || 'Daftar'}
+                    <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                  </Link>
+                </div>
+              </article>
+            )
+          })}
         </div>
 
-        {/* 4 Pilar Keunggulan Santri */}
-        <div className="mb-20">
+        {/* Pilar Kurikulum */}
+        <div className="mt-20 md:mt-28">
           <div className="text-center max-w-2xl mx-auto mb-12">
-            <h3 className="font-[var(--font-display)] text-2xl md:text-3xl font-bold mb-3">
-              Kurikulum Holistik Masa Depan
+            <h3 className="font-heading! text-2xl md:text-3xl font-bold tracking-tight text-[var(--text)]">
+              {content.copy.kurikulum_title}
             </h3>
-            <p className="text-[var(--text-secondary)] text-sm md:text-base">
-              Keseimbangan antara ilmu ukhrawi dan bekal teknologi kontemporer
+            <p className="mt-3 text-sm md:text-base text-[var(--text-secondary)]">
+              {content.copy.kurikulum_desc}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                icon: BookOpen,
-                title: 'Tahfidz Mutqin 30 Juz',
-                desc: 'Metode hafalan intensif bimbingan asatidz bersanad dengan target mutqin dan adab Qur\'ani.'
-              },
-              {
-                icon: Laptop,
-                title: 'Coding & AI Academy',
-                desc: 'Penguasaan rekayasa software, web development, robotika, dan dasar machine learning.'
-              },
-              {
-                icon: Users,
-                title: 'Bahasa Internasional',
-                desc: 'Lingkungan pembiasaan bilingual Bahasa Arab dan Inggris aktif dalam interaksi harian.'
-              },
-              {
-                icon: ShieldCheck,
-                title: 'Adab & Kepemimpinan',
-                desc: 'Pendidikan akhlak mulia, kemandirian pondok, dan kepekaan sosial kemasyarakatan.'
-              }
-            ].map((pillar, i) => {
-              const Icon = pillar.icon
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            {content.pillars.map((pillar) => {
+              const Icon = ICON_MAP[resolveIconName(pillar.icon)]
               return (
-                <div key={i} className="p-6 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--color-border)] hover:border-emerald-600/30 transition-all">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-600/10 text-emerald-700 flex items-center justify-center mb-4">
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-lg mb-2 text-[var(--text)]">{pillar.title}</h4>
-                  <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{pillar.desc}</p>
+                <div
+                  key={pillar.id}
+                  className="rounded-2xl border border-[var(--color-border)] bg-[var(--bg-secondary)] p-6 transition-colors duration-300 hover:border-emerald-700/30"
+                >
+                  <span className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-700">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h4 className="text-base font-bold text-[var(--text)]">
+                    {pillar.content?.title}
+                  </h4>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {pillar.content?.desc}
+                  </p>
                 </div>
               )
             })}
           </div>
         </div>
 
-        {/* Alur Pendaftaran Simple Timeline */}
-        <div className="rounded-3xl bg-[var(--bg-secondary)] border border-[var(--color-border)] p-8 md:p-12 mb-20">
-          <div className="text-center max-w-xl mx-auto mb-10">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Langkah Mudah</span>
-            <h3 className="font-[var(--font-heading)] text-2xl md:text-3xl font-bold mt-1">Alur Pendaftaran PPDB</h3>
+        {/* Alur Pendaftaran */}
+        <div className="mt-20 md:mt-28">
+          <div className="text-center max-w-xl mx-auto mb-12">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              {content.copy.alur_kicker}
+            </span>
+            <h3 className="mt-3 font-heading! text-2xl md:text-3xl font-bold tracking-tight text-[var(--text)]">
+              {content.copy.alur_title}
+            </h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { step: '01', title: 'Pendaftaran Online', desc: 'Isi formulir biodata santri dan unggah dokumen pendukung melalui sistem.' },
-              { step: '02', title: 'Verifikasi Berkas', desc: 'Tim panitia memvalidasi data akademik dan administrasi calon santri.' },
-              { step: '03', title: 'Ujian Seleksi & Tasmi', desc: 'Tes kemampuan dasar, observasi minat digital, dan tes baca Al-Qur\'an.' },
-              { step: '04', title: 'Pengumuman & Daftar Ulang', desc: 'Penerimaan santri baru resmi dan persiapan orientasi santri (khutbah & ta\'aruf).' }
-            ].map((step, idx) => (
-              <div key={idx} className="relative p-5 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--color-border)] shadow-sm">
-                <span className="text-2xl font-black text-emerald-600/30 block mb-2 font-mono">{step.step}</span>
-                <h4 className="font-bold text-base mb-1 text-[var(--text)]">{step.title}</h4>
-                <p className="text-xs md:text-sm text-[var(--text-secondary)] leading-relaxed">{step.desc}</p>
-              </div>
+          <ol className="grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+            {content.steps.map((step, idx) => (
+              <li key={step.id}>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-bold tracking-[0.2em] text-emerald-700">
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--color-border)]" aria-hidden />
+                </div>
+                <h4 className="mt-4 text-base font-bold text-[var(--text)]">
+                  {step.content?.title}
+                </h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {step.content?.desc}
+                </p>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
 
-        {/* Call to Action Banner */}
-        <div className="rounded-3xl bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
-          <div className="max-w-xl text-center md:text-left">
-            <h3 className="font-[var(--font-display)] text-2xl md:text-3xl font-bold mb-3">
-              Konsultasi Pendaftaran Santri Baru?
-            </h3>
-            <p className="text-emerald-100/80 text-sm md:text-base leading-relaxed">
-              Tim panitia PPDB siap melayani pertanyaan mengenai kurikulum, program beasiswa, dan kunjungan kampus pesantren.
-            </p>
-          </div>
+        {/* Banner CTA */}
+        <div className="mt-20 md:mt-28 rounded-2xl border border-emerald-400/15 bg-emerald-950 px-7 py-10 text-white md:px-12 md:py-12">
+          <div className="flex flex-col items-center gap-8 md:flex-row md:justify-between">
+            <div className="max-w-xl text-center md:text-left">
+              <h3 className="font-heading! text-2xl md:text-3xl font-bold tracking-tight">
+                {content.copy.cta_title}
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-emerald-100/75 md:text-base">
+                {content.copy.cta_desc}
+              </p>
+            </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0 w-full sm:w-auto">
-            <Link
-              href="/contact"
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 rounded-full bg-white text-emerald-900 font-bold hover:bg-emerald-50 transition-colors shadow-md text-sm"
-            >
-              <Phone className="w-4 h-4 text-emerald-700" />
-              Hubungi Panitia
-            </Link>
-            <Link
-              href="/programs"
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 rounded-full border border-emerald-400/30 text-white hover:bg-white/10 transition-colors text-sm font-medium"
-            >
-              Lihat Fasilitas & Asrama
-            </Link>
+            <div className="flex w-full shrink-0 flex-col gap-3 sm:flex-row md:w-auto">
+              <Link
+                href={content.copy.cta_primary_href || '/contact'}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-50"
+              >
+                <Phone className="h-4 w-4 text-emerald-700" />
+                {content.copy.cta_primary_label}
+              </Link>
+              <Link
+                href={content.copy.cta_secondary_href || '/programs'}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+              >
+                {content.copy.cta_secondary_label}
+              </Link>
+            </div>
           </div>
         </div>
       </section>

@@ -27,8 +27,10 @@ export default function EmptyState({
       aria-live="polite"
       className={`animate-empty-in relative flex flex-col items-center justify-center px-6 py-12 sm:py-14 text-center rounded-2xl border border-dashed border-[var(--border)] bg-white/50 backdrop-blur-sm overflow-hidden ${className}`}
     >
-      {/* Decorative dot pattern */}
-      <div className="absolute inset-0 bg-pattern-dots-gold opacity-[0.05]" />
+      {/* Decorative dot pattern — `pointer-events-none` wajib karena div absolut
+          ini ter-paint di atas konten statis dan akan menelan klik tombol
+          `action`. */}
+      <div className="absolute inset-0 bg-pattern-dots-gold opacity-[0.05] pointer-events-none" />
 
       {/* Soft decorative glow */}
       <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[var(--accent)]/20 to-transparent" />

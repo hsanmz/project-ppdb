@@ -19,15 +19,22 @@ export default function NewsDetailClient({ article, allNews }: { article: NewsAr
   useScrollReveal(contentRef, { start: 'top 85%', targets: 'children', stagger: 0.08 })
 
   useEffect(() => {
-    document.title = `${info?.title ?? ''} | PTDARRAHMAN`
+    document.title = info?.title ? `${info.title} | PTDARRAHMAN` : 'Berita | PTDARRAHMAN'
   }, [info])
 
+  // Mengembalikan '' untuk tanggal kosong/tidak valid supaya UI tidak
+  // menampilkan teks "Invalid Date".
   const formatDate = (dateStr: string) => {
+    if (!dateStr) return ''
     const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return ''
     return date.toLocaleDateString('id-ID', {
       year: 'numeric', month: 'long', day: 'numeric',
     })
   }
+
+  const dateText = formatDate(article.date)
+  const author = info?.author ?? ''
 
   return (
     <>
@@ -41,7 +48,6 @@ export default function NewsDetailClient({ article, allNews }: { article: NewsAr
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-white/95 via-white/80 to-white/95" />
         </div>
-        <div className="absolute top-0 left-0 right-0 verse-strip" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
           <div className="mb-6 space-y-3">
             <Link href="/news" className="glass-card inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] shadow-sm hover:shadow-md transition-all">
@@ -57,16 +63,22 @@ export default function NewsDetailClient({ article, allNews }: { article: NewsAr
           <h1 className="font-[var(--font-display)] text-3xl md:text-5xl lg:text-6xl font-bold text-[var(--text)] leading-[1.05] mt-4 mb-4 tracking-[-0.02em]">
             {info?.title}
           </h1>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-muted)]">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4" />
-              {formatDate(article.date)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <User className="w-4 h-4" />
-              {info?.author}
-            </span>
-          </div>
+          {(dateText || author) && (
+            <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-muted)]">
+              {dateText && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  {dateText}
+                </span>
+              )}
+              {author && (
+                <span className="flex items-center gap-1.5">
+                  <User className="w-4 h-4" />
+                  {author}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

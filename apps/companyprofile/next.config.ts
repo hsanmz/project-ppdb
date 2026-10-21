@@ -12,29 +12,68 @@ const cspConnectSrc = [
   "https:",
 ].join(" ");
 
+// Host gambar untuk `next/image`.
+//
+// Selain CDN sendiri, backend juga menyajikan berkas unggahan: dengan
+// `UPLOAD_PROVIDER=db` (atau `local`) respons `/companyprofile/upload` berisi
+// `<base_url>/uploads/{id}`. next/image menolak host yang tidak terdaftar, dan
+// penolakan itu *melempar* error — dialog CRUD admin ikut mati dan halaman
+// publik yang memuat gambar tersebut balas 500. Karena itu origin API wajib
+// ikut diizinkan.
+//
+// Fallback localhost hanya dipakai di non-produksi supaya daftar pola tidak
+// tertinggal host dev pada build produksi.
+const isProduction = process.env.NODE_ENV === "production";
+const apiImageOrigin =
+  apiOrigin || (isProduction ? "" : "http://localhost:8000");
+
+const remotePatterns: {
+  protocol: "http" | "https";
+  hostname: string;
+  port?: string;
+}[] = [
+  { protocol: "https", hostname: "res.cloudinary.com" },
+  { protocol: "https", hostname: "img.youtube.com" },
+  { protocol: "https", hostname: "ui-avatars.com" },
+  { protocol: "https", hostname: "images.unsplash.com" },
+];
+
+let apiImageHostname = "";
+if (apiImageOrigin) {
+  try {
+    const api = new URL(apiImageOrigin);
+    apiImageHostname = api.hostname;
+    if (api.protocol === "http:" || api.protocol === "https:") {
+      remotePatterns.push({
+        protocol: api.protocol === "https:" ? "https" : "http",
+        hostname: api.hostname,
+        ...(api.port ? { port: api.port } : {}),
+      });
+    }
+  } catch {
+    // NEXT_PUBLIC_API_URL tidak valid: biarkan daftar apa adanya. Gambar
+    // unggahan akan ditolak next/image ("hostname not configured").
+  }
+}
+
+// Optimizer `next/image` menolak fetch ke IP privat (proteksi SSRF), sehingga
+// `http://localhost:8000/uploads/...` tetap gagal walau sudah lolos
+// `remotePatterns`. Dilonggarkan hanya ketika host API memang alamat lokal
+// (situasi dev); di produksi host API publik sehingga flag tetap mati.
+const allowLocalIp = [
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+].includes(apiImageHostname);
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../../"),
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-      },
-      {
-        protocol: "https",
-        hostname: "img.youtube.com",
-      },
-      {
-        protocol: "https",
-        hostname: "ui-avatars.com",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-      },
-    ],
+    remotePatterns,
+    dangerouslyAllowLocalIP: allowLocalIp,
   },
   async headers() {
     return [

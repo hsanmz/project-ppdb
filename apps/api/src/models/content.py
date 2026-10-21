@@ -27,6 +27,10 @@ class Program(Base):
     slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     icon: Mapped[str | None] = mapped_column(String(255))
     image: Mapped[str | None] = mapped_column(String(255))
+    # Urutan tampil (ASC) untuk menu Program di navbar/footer dan daftar program.
+    # NOT NULL tanpa server_default: nilai default create dikirim router lewat
+    # `COLUMN_DEFAULTS` karena penulisan generik memakai INSERT mentah.
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     content: Mapped[dict | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -96,6 +100,81 @@ class SocialLink(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     href: Mapped[str] = mapped_column(String(255), nullable=False)
     path: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PpdbJalurCard(Base):
+    """Kartu "Jalur Pendaftaran" pada halaman publik `/ppdb`.
+
+    Dikelola dari CMS Company Profile (tab Jalur PPDB). Isi kartu (judul,
+    label, deskripsi, poin, label/tautan CTA, urutan, warna aksen) disimpan
+    sebagai JSON di kolom `content`; hanya `icon` yang berupa kolom sendiri
+    agar pola kolomnya sejalan dengan `Program`.
+    """
+
+    __tablename__ = "ppdb_jalur_cards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    icon: Mapped[str | None] = mapped_column(String(255))
+    content: Mapped[dict | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PpdbPillar(Base):
+    """Kartu pilar kurikulum (mis. Tahfidz, Coding & AI) di halaman `/ppdb`."""
+
+    __tablename__ = "ppdb_pillars"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    icon: Mapped[str | None] = mapped_column(String(255))
+    content: Mapped[dict | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PpdbStep(Base):
+    """Langkah pada timeline "Alur Pendaftaran" di halaman `/ppdb`."""
+
+    __tablename__ = "ppdb_steps"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    content: Mapped[dict | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PpdbPageCopy(Base):
+    """Teks judul seksi & banner CTA halaman `/ppdb` (singleton satu baris).
+
+    Router generik menolak pembuatan baris kedua untuk entitas `ppdb-copy`,
+    sehingga selalu ada tepat satu sumber teks untuk halaman tersebut.
+    """
+
+    __tablename__ = "ppdb_page_copy"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    content: Mapped[dict | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class HeroSlide(Base):
+    """Satu slide hero di beranda.
+
+    Urutan tampil ada di kolom `order` (ASC); teks dan tombol disimpan di
+    `content` sebagai JSON (label, title, subtitle, button_label, button_href).
+    `image` memakai kolom sendiri supaya tombol unggah gambar form admin bekerja
+    seperti pada entitas konten lain.
+    """
+
+    __tablename__ = "hero_slides"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    image: Mapped[str | None] = mapped_column(String(255))
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content: Mapped[dict | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
