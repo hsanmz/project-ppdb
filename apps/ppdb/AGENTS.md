@@ -112,7 +112,9 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 
 ---
 
-## 🎨 Dynamic Branding & Loading
+## 🎨 Dynamic Branding & Design System
+- **Panduan Desain UI/UX:** Rujuk ke [**DESIGN.md**](../../DESIGN.md) untuk pedoman warna (Warm Ivory `#F7F5F0`, Islamic Emerald `#1A6B47`, Regal Gold `#D4A853`), tipografi (Playfair Display & Inter), animasi (`.ease-brand-pill`), dan format cetak A4 baku.
+- **System Design:** Rujuk ke [**README.md**](../../README.md) untuk diagram arsitektur teknis, alur 10 tahap pendaftar, webhook payment, dan spesifikasi container.
 - **No Static Logo:** Logo institusi selalu diambil dinamis via `settingsService.getLogo()` (GET `/companyprofile/settings/logo`).
 - **Live Updates:** Perubahan aset brand langsung terefleksi via Server-Sent Events (SSE) `/companyprofile/events`.
 - **`PageLoader` & `Skeleton`:** Loader animasi dual SVG arc spinner tanpa aset gambar statis.

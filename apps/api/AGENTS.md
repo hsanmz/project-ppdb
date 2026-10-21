@@ -1,6 +1,8 @@
 # Core API Backend — PTDARRAHMAN
 
 Dokumen ini memberikan panduan arsitektur, konvensi kode, modul, dan aturan bisnis backend Core API untuk agen AI dan developer.
+*Untuk arsitektur sistem monorepo, topologi jaringan, dan alur request lengkap, rujuk ke [README.md](../../README.md).*
+*Untuk panduan desain antarmuka, warna, dan cetak dokumen A4, rujuk ke [DESIGN.md](../../DESIGN.md).*
 
 ---
 

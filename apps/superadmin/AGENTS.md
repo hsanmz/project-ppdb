@@ -52,6 +52,8 @@ The application is a Single Page Application (SPA) with the following routes:
 - Page-level permissions can be directly assigned to users via the `/users/:id/page-permissions` endpoint, managing specific UI capabilities per user based on assigned module roles.
 
 ## Product Rules (from root AGENTS.md + docs/REQUIREMENTS.md)
+- **UI/UX Design System:** Rujuk ke [**DESIGN.md**](../../DESIGN.md) untuk pedoman warna, tipografi, token, dan komponen shell Superadmin (`@repo/ui`).
+- **System Design:** Rujuk ke [**README.md**](../../README.md) untuk arsitektur teknis lengkap dan RBAC matrix.
 - **No education-level selection.** This system has no list of jenjang (`SMP`, `SMK`, ...) and no jenjang picker anywhere.
 - **Health form replaces Medcheck.** Applicants self-fill the health identification form during registration (10 questions + attestation). It is stored as sensitive data viewable only in detailed admin dossiers.
 - **Superadmin Boundary:** Superadmin manages user accounts, roles, permissions, WhatsApp connection, and platform activity logs. Day-to-day PPDB registration, document review, exam scoring, and stage payments are managed in the PPDB Backoffice (`apps/ppdb`), not in this panel.
