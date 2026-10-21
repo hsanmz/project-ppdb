@@ -1742,6 +1742,14 @@ class PPDBService:
             else None
         )
 
+        # Kelengkapan nilai — menentukan apakah keputusan kelulusan boleh ditetapkan.
+        from src.services.selection_service import selection_score_gaps
+
+        app_obj = self.repository.db.get(PPDBApplicant, applicant_id)
+        missing_scores = (
+            selection_score_gaps(self.repository.db, app_obj) if app_obj else []
+        )
+
         return {
             "applicant": applicant,
             "tiu_score": applicant.get("tiu_score"),
@@ -1751,6 +1759,8 @@ class PPDBService:
             "graduation_status": sel_res.graduation_status
             if sel_res
             else applicant.get("status"),
+            "missing_scores": missing_scores,
+            "scores_complete": not missing_scores,
             "issued_at": datetime.now(WIB).isoformat(),
         }
 

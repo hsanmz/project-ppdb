@@ -12,6 +12,7 @@ import { Card } from "@/components/ui"
 import { Badge } from "@/components/ui"
 import { Skeleton } from "@/components/ui"
 import { EmptyState } from "@/components/ui"
+import { ErrorState } from "@/components/ui"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 export default function RolesPage() {
@@ -32,7 +33,13 @@ export default function RolesPage() {
     }
   }, [currentUser, authLoading, canView, navigate])
 
-  const { data: roles = [], isLoading: loading } = useQuery({
+  const {
+    data: roles = [],
+    isLoading: loading,
+    isError: rolesError,
+    error: rolesErr,
+    refetch: refetchRoles,
+  } = useQuery({
     queryKey: ['roles'],
     queryFn: () => api.getRoles(),
     enabled: canView && !authLoading
@@ -44,8 +51,8 @@ export default function RolesPage() {
       toast('success', 'Role berhasil dihapus')
       queryClient.invalidateQueries({ queryKey: ['roles'] })
     },
-    onError: (e: any) => {
-      toast('error', e.message || 'Gagal menghapus')
+    onError: (e: unknown) => {
+      toast('error', api.getErrorMessage(e, 'Gagal menghapus'))
     }
   })
 
@@ -65,7 +72,7 @@ export default function RolesPage() {
   }
 
   function getPermissionBadges(permissions: Record<string, string>) {
-    const active = Object.entries(permissions || {}).filter(([_, lvl]) => lvl && lvl !== 'none')
+    const active = Object.entries(permissions || {}).filter(([, lvl]) => lvl && lvl !== 'none')
     if (active.length === 0) return <span className="text-xs text-muted-foreground">—</span>
     return active.map(([mod]) => (
       <Badge key={mod} variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 font-medium">
@@ -130,6 +137,13 @@ export default function RolesPage() {
             </Card>
           ))}
         </div>
+      ) : rolesError ? (
+        /* Query gagal: tampilkan error, BUKAN EmptyState "Belum Ada Role" */
+        <ErrorState
+          status={api.isApiError(rolesErr) ? rolesErr.status : 500}
+          retry={() => refetchRoles()}
+          fullscreen={false}
+        />
       ) : roles.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}

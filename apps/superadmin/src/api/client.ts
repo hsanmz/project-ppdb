@@ -28,6 +28,45 @@ async function parseJsonSafe<T>(res: Response, label: string): Promise<T> {
   }
 }
 
+/**
+ * Error HTTP dengan status code dan (untuk 422) field error per nama kolom.
+ * Tetap turunan `Error` sehingga kode lama yang membaca `err.message` aman.
+ */
+export class ApiError extends Error {
+  readonly status?: number
+  readonly fields?: Record<string, string>
+  constructor(message: string, status?: number, fields?: Record<string, string>) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.fields = fields
+  }
+}
+
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError
+}
+
+const NETWORK_ERROR_MESSAGE =
+  'Tidak dapat terhubung ke server. Periksa koneksi internet Anda lalu coba lagi.'
+
+/**
+ * Normalisasi pesan error menjadi teks yang aman ditampilkan ke user:
+ * - `ApiError` → pesan dari backend (sudah berbahasa Indonesia / dari FastAPI)
+ * - `TypeError` (fetch gagal: DNS, offline, CORS) → pesan jaringan yang manusiawi,
+ *   bukan `Failed to fetch`
+ * - Error lain → pesan aslinya, atau fallback jika kosong
+ */
+export function getErrorMessage(
+  err: unknown,
+  fallback = 'Terjadi kesalahan. Silakan coba lagi.'
+): string {
+  if (isApiError(err)) return err.message
+  if (err instanceof TypeError) return NETWORK_ERROR_MESSAGE
+  if (err instanceof Error && err.message.trim() !== '') return err.message
+  return fallback
+}
+
 const USER_KEY = 'sa_user'
 
 // ── Dummy auth (dev-only) ────────────────────────────────────
@@ -81,22 +120,42 @@ function setStoredUser(user: AuthUser) {
 
 let refreshPromise: Promise<boolean> | null = null
 
+interface ParsedErrorDetail {
+  message: string
+  fields?: Record<string, string>
+}
+
 /**
  * Ekstrak pesan error dari body FastAPI. `detail` bisa berupa string (mis.
  * "Incorrect username or password") atau array validasi 422 (list of
- * {loc, msg, type}). Kalau array, gabungkan `msg` per elemen.
+ * {loc, msg, type}). Kalau array, gabungkan `msg` per elemen dan petakan
+ * juga ke `fields` (nama kolom → pesan) agar form bisa menempelkan error
+ * per-field, bukan hanya satu toast.
  */
-function extractErrorMessage(body: any, fallbackText: string): string {
-  if (!body) return fallbackText
+function parseErrorDetail(body: any, fallbackText: string): ParsedErrorDetail {
+  if (!body) return { message: fallbackText }
   const { detail } = body
-  if (typeof detail === 'string' && detail.trim() !== '') return detail
+  if (typeof detail === 'string' && detail.trim() !== '') return { message: detail }
   if (Array.isArray(detail)) {
-    const msgs = detail
-      .map((item: any) => (item && typeof item.msg === 'string' ? item.msg : ''))
-      .filter((m: string) => m !== '')
-    if (msgs.length > 0) return msgs.join('; ')
+    const msgs: string[] = []
+    const fields: Record<string, string> = {}
+    for (const item of detail) {
+      if (!item || typeof item.msg !== 'string' || item.msg.trim() === '') continue
+      msgs.push(item.msg)
+      const loc = Array.isArray(item.loc) ? item.loc : []
+      const key = [...loc].reverse().find((p: unknown) => typeof p === 'string' && p !== '')
+      if (typeof key === 'string') {
+        fields[key] = fields[key] ? `${fields[key]}; ${item.msg}` : item.msg
+      }
+    }
+    if (msgs.length > 0) {
+      return {
+        message: msgs.join('; '),
+        fields: Object.keys(fields).length > 0 ? fields : undefined,
+      }
+    }
   }
-  return fallbackText
+  return { message: fallbackText }
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -138,7 +197,7 @@ async function apiFetch<T>(endpoint: string, opts: RequestInit = {}): Promise<T>
     const firstBody = await parseJsonSafe<any>(res, `API ${endpoint}`).catch(() => ({
       detail: res.statusText,
     }))
-    const firstMsg = extractErrorMessage(firstBody, `API ${res.status}`)
+    const firstMsg = parseErrorDetail(firstBody, `API ${res.status}`).message
 
     const refreshed = await tryRefresh()
     if (refreshed) {
@@ -147,15 +206,19 @@ async function apiFetch<T>(endpoint: string, opts: RequestInit = {}): Promise<T>
     if (res.status === 401) {
       clearAuth()
       if (window.location.pathname !== '/auth/login') {
+        // Tandai di sessionStorage agar LoginPage bisa menampilkan pesan
+        // "sesi berakhir" — redirect ini memuat ulang seluruh aplikasi.
+        sessionStorage.setItem('sa_session_expired', '1')
         window.location.href = '/auth/login'
       }
-      throw new Error(firstMsg || 'Unauthorized')
+      throw new ApiError(firstMsg || 'Unauthorized', 401)
     }
   }
 
   if (!res.ok) {
     const body = await parseJsonSafe<any>(res, `API ${endpoint}`).catch(() => ({ detail: res.statusText }))
-    throw new Error(extractErrorMessage(body, `API ${res.status}`))
+    const parsed = parseErrorDetail(body, `API ${res.status}`)
+    throw new ApiError(parsed.message, res.status, parsed.fields)
   }
 
   if (res.status === 204) return undefined as T

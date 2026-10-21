@@ -107,6 +107,12 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
 
   const handleConfirmVerdict = () => {
     if (!verdictMode) return
+    // Reset ke "selection" selalu diizinkan; keputusan lulus/tidak lulus
+    // menunggu seluruh nilai lengkap.
+    if (verdictMode !== 'selection' && !scoresComplete) {
+      toast('error', `Nilai belum lengkap: ${missingScores.join(', ')}. Lengkapi nilai terlebih dahulu.`)
+      return
+    }
     verdictMutation.mutate({ status: verdictMode, reason: verdictReason.trim() || undefined })
   }
 
@@ -118,6 +124,11 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
   const tiuCompletedAt = data?.tiu_completed_at
   const evaluatorNotes = data?.evaluator_notes
   const graduationStatus = data?.graduation_status || applicant.status
+
+  // Kelengkapan nilai — keputusan lulus/tidak lulus hanya aktif bila seluruh
+  // nilai (TIU jalur TIU, Tahfidz, Wawancara, rubrik lain) sudah masuk.
+  const missingScores: string[] = Array.isArray(data?.missing_scores) ? data.missing_scores : []
+  const scoresComplete = !isLoading && !!data && missingScores.length === 0
 
   const isTiuPath = ['reguler', 'umum', 'seleksi', 'tes'].some(p =>
     (appData.registration_path || '').toLowerCase().includes(p)
@@ -501,8 +512,22 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
               {/* Tombol Validasi — hanya tampil jika admin punya hak */}
               {canCrud && !verdictMode && (
                 <div className="px-4 py-3 border-t border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    {graduationStatus === 'selection' || !graduationStatus
+                  <p className={cn(
+                    "text-xs",
+                    scoresComplete ? "text-muted-foreground" : "text-amber-700 font-medium flex items-start gap-1.5"
+                  )}>
+                    {!scoresComplete ? (
+                      isLoading ? (
+                        <span>Memuat data nilai pendaftar…</span>
+                      ) : (
+                        <>
+                          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            Keputusan hanya dapat ditetapkan setelah seluruh nilai masuk. Nilai belum lengkap: {missingScores.join(', ')}.
+                          </span>
+                        </>
+                      )
+                    ) : graduationStatus === 'selection' || !graduationStatus
                       ? 'Tentukan keputusan kelulusan pendaftar ini.'
                       : 'Ubah keputusan yang sudah ditetapkan.'}
                   </p>
@@ -512,7 +537,7 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
                         size="sm"
                         className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
                         onClick={() => setVerdictMode('passed')}
-                        disabled={verdictMutation.isPending}
+                        disabled={verdictMutation.isPending || !scoresComplete}
                       >
                         <ThumbsUp className="h-3.5 w-3.5" /> Lulus
                       </Button>
@@ -523,7 +548,7 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
                         variant="destructive"
                         className="h-8 text-xs gap-1.5 w-full sm:w-auto"
                         onClick={() => setVerdictMode('failed')}
-                        disabled={verdictMutation.isPending}
+                        disabled={verdictMutation.isPending || !scoresComplete}
                       >
                         <ThumbsDown className="h-3.5 w-3.5" /> Tidak Lulus
                       </Button>
@@ -590,7 +615,10 @@ function ScoreDetailModal({ applicant, open, onOpenChange, onStatusChanged, logo
                         'bg-amber-600 hover:bg-amber-700 text-white'
                       )}
                       onClick={handleConfirmVerdict}
-                      disabled={verdictMutation.isPending}
+                      disabled={
+                        verdictMutation.isPending ||
+                        (verdictMode !== 'selection' && !scoresComplete)
+                      }
                     >
                       {verdictMutation.isPending ? 'Menyimpan...' : 'Ya, Konfirmasi'}
                     </Button>

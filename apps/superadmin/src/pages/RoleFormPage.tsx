@@ -4,7 +4,6 @@ import { ArrowLeft, Shield, ShieldCheck, Lock } from 'lucide-react'
 import PageHero from '../components/PageHero'
 import * as api from '../api/client'
 import { useToast } from '../components/Toast'
-import { ACCESS_LEVELS } from '../types'
 import type { AccessLevel } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useQueryClient } from '@tanstack/react-query'
@@ -52,8 +51,12 @@ export default function RoleFormPage() {
           }
           setPermissions(perms)
         }
-      }).catch(() => {
-        if (active) navigate('/roles')
+      }).catch((e) => {
+        if (active) {
+          // Beri tahu user apa yang gagal, jangan diam-diam me-navigate balik.
+          toast('error', api.getErrorMessage(e, 'Gagal memuat data role.'))
+          navigate('/roles')
+        }
       }).finally(() => {
         if (active) setFetching(false)
       })
@@ -61,7 +64,7 @@ export default function RoleFormPage() {
     return () => {
       active = false
     }
-  }, [id, isEdit, navigate])
+  }, [id, isEdit, navigate, toast])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,7 +85,7 @@ export default function RoleFormPage() {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
       navigate('/roles')
     } catch (e: any) {
-      toast('error', e.message || 'Gagal menyimpan')
+      toast('error', api.getErrorMessage(e, 'Gagal menyimpan'))
     } finally {
       setLoading(false)
     }

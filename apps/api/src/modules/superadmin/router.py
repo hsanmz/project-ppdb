@@ -427,6 +427,7 @@ def list_audit_logs(
     search: str = Query(""),
     entity_type: str = Query(""),
     action: str = Query(""),
+    user_id: str = Query(""),
     user: dict[str, Any] = Depends(require_superadmin),
 ):
     """Riwayat aktivitas (audit log) dengan pencarian, filter, dan paginasi."""
@@ -435,6 +436,8 @@ def list_audit_logs(
         filters["entity_type"] = entity_type
     if action:
         filters["action"] = action
+    if user_id:
+        filters["user_id"] = user_id
 
     res = search_paginated(
         "audit_log",

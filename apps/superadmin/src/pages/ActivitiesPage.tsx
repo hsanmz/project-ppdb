@@ -72,13 +72,14 @@ export default function ActivitiesPage() {
       if (res?.entity_types) setEntityTypes(res.entity_types)
       if (res?.actions) setActions(res.actions)
     } catch (e: any) {
-      toast('error', e.message || 'Gagal memuat riwayat aktivitas')
+      toast('error', api.getErrorMessage(e, 'Gagal memuat riwayat aktivitas'))
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search, entityType, action])

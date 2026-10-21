@@ -9,6 +9,7 @@ import {
   waLogoutSession,
   waSendTest,
   waCancelPairing,
+  getErrorMessage,
   type WALogEntry,
   type WAProxyStatus,
   type WAQueueStats,
@@ -22,6 +23,9 @@ import type { LoginMethod } from '../components/whatsapp/constants'
 export default function WhatsAppPage() {
   const [session, setSession] = useState<WAProxyStatus | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
+  // Gagal memuat status ≠ OFFLINE. Tanpa state ini, error backend diterjemahkan
+  // layar jadi "Terputus (Offline)" — padahal sesungguhnya tidak diketahui.
+  const [sessionError, setSessionError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -33,6 +37,7 @@ export default function WhatsAppPage() {
   const [logsPage, setLogsPage] = useState(1)
   const [logsStatus, setLogsStatus] = useState('')
   const [logsLoading, setLogsLoading] = useState(true)
+  const [logsError, setLogsError] = useState<string | null>(null)
 
   // Form test (hanya saat READY)
   const [testPhone, setTestPhone] = useState('')
@@ -51,8 +56,11 @@ export default function WhatsAppPage() {
     try {
       const data = await waGetStatus()
       setSession(data)
-    } catch {
+      setSessionError(null)
+    } catch (e) {
+      // Jangan terjemahkan jadi OFFLINE — status sesungguhnya tidak diketahui.
       setSession(null)
+      setSessionError(getErrorMessage(e, 'Gagal memuat status sesi WhatsApp.'))
     } finally {
       if (!silent) setSessionLoading(false)
     }
@@ -75,9 +83,16 @@ export default function WhatsAppPage() {
         setLogs(res.data || [])
         setLogsTotal(res.total || 0)
         setLogsTotalPages(res.totalPages || 1)
+        setLogsError(null)
+      } else {
+        throw new Error('Respons tidak valid dari server saat memuat log.')
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      // Kosongkan tabel + tandai error supaya tidak menyamar jadi "Belum Ada Log".
+      setLogs([])
+      setLogsTotal(0)
+      setLogsTotalPages(1)
+      setLogsError(getErrorMessage(e, 'Gagal memuat riwayat pengiriman.'))
     } finally {
       setLogsLoading(false)
     }
@@ -86,6 +101,9 @@ export default function WhatsAppPage() {
   // ── Initial load + polling 8 detik ─────────────────────────────────────
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    // Load awal + polling: setState loading di awal fetch adalah pola fetch-on-mount
+    // yang sama dengan QrPanel/ApplicantsPage — tidak bisa didefer tanpa mengubah UX.
     fetchSession()
     fetchQueueStats()
     fetchLogs(1, '')
@@ -99,9 +117,20 @@ export default function WhatsAppPage() {
       if (pollRef.current) clearInterval(pollRef.current)
       initPollRef.current.forEach(clearTimeout)
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [fetchSession, fetchQueueStats, fetchLogs])
 
   useEffect(() => {
+    document.documentElement.classList.add('no-scrollbar')
+    document.body.classList.add('no-scrollbar')
+    return () => {
+      document.documentElement.classList.remove('no-scrollbar')
+      document.body.classList.remove('no-scrollbar')
+    }
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs(logsPage, logsStatus)
   }, [logsPage, logsStatus, fetchLogs])
 
@@ -110,6 +139,7 @@ export default function WhatsAppPage() {
   // Kembali ke mode 'phone' jika masih ada pairing code aktif dari sesi lalu
   useEffect(() => {
     if (session?.status === 'qr' && session?.pairingCode && loginMethod === 'qr') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoginMethod('phone')
     }
   }, [session?.status, session?.pairingCode, loginMethod])
@@ -128,7 +158,7 @@ export default function WhatsAppPage() {
       const delays = [500, 1_500, 3_000]
       initPollRef.current = delays.map((d) => window.setTimeout(() => fetchSession(true), d))
     } catch (err) {
-      setActionMsg({ type: 'error', text: (err as Error).message })
+      setActionMsg({ type: 'error', text: getErrorMessage(err, 'Gagal menginisialisasi sesi.') })
     } finally {
       setActionLoading(false)
     }
@@ -145,7 +175,7 @@ export default function WhatsAppPage() {
       setActionMsg({ type: 'success', text: res?.message || 'Sesi WhatsApp berhasil diputuskan.' })
       await fetchSession()
     } catch (err) {
-      setActionMsg({ type: 'error', text: (err as Error).message })
+      setActionMsg({ type: 'error', text: getErrorMessage(err, 'Gagal memutus sesi.') })
     } finally {
       setActionLoading(false)
     }
@@ -171,7 +201,7 @@ export default function WhatsAppPage() {
         })
       }
     } catch (err) {
-      setActionMsg({ type: 'error', text: (err as Error).message })
+      setActionMsg({ type: 'error', text: getErrorMessage(err, 'Gagal mengirim pesan uji coba.') })
     } finally {
       setSendingTest(false)
     }
@@ -211,7 +241,7 @@ export default function WhatsAppPage() {
   const webhookMismatch = session?.webhookMismatch === true
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn no-scrollbar">
       <PageHero
         eyebrow="Gateway & Notifikasi"
         title="WhatsApp Gateway"
@@ -220,8 +250,12 @@ export default function WhatsAppPage() {
         loading={sessionLoading && !session}
         chips={[
           {
-            icon: isReady ? Radio : Clock,
-            label: isReady ? `Aktif (${session?.phone || 'Connected'})` : `Status: ${statusLabel.toUpperCase()}`,
+            icon: isReady ? Radio : sessionError ? AlertTriangle : Clock,
+            label: isReady
+              ? `Aktif (${session?.phone || 'Connected'})`
+              : sessionError
+                ? 'Status: TIDAK DIKETAHUI'
+                : `Status: ${statusLabel.toUpperCase()}`,
           },
           {
             icon: ShieldCheck,
@@ -286,8 +320,26 @@ WA_SERVICE_API_KEY=<api-key-yang-sama-dengan-apps/whatsapp/.env>`}
         </div>
       )}
 
-      {/* Alert service offline */}
-      {!notConfigured && statusLabel === 'OFFLINE' && (
+      {/* Gagal memuat status — tampilkan error, jangan menyamar sebagai OFFLINE */}
+      {sessionError && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+          <div className="flex-1 text-xs text-red-800">
+            <p className="font-semibold">Gagal Memuat Status WhatsApp Gateway</p>
+            <p className="mt-0.5 text-red-700">{sessionError}</p>
+          </div>
+          <button
+            onClick={() => fetchSession()}
+            disabled={sessionLoading}
+            className="shrink-0 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
+      {/* Alert service offline (hanya jika status benar-benar terbaca OFFLINE) */}
+      {!notConfigured && !sessionError && !sessionLoading && statusLabel === 'OFFLINE' && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-2">
           <div className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 text-amber-600" /> Layanan WhatsApp Microservice Belum Aktif di Port 3100
@@ -334,7 +386,24 @@ WA_SERVICE_API_KEY=<api-key-yang-sama-dengan-apps/whatsapp/.env>`}
         </div>
 
         {/* Kolom Kanan: Riwayat Pengiriman Menempel & Independently Scrollable */}
-        <div className="lg:col-span-7 lg:sticky lg:top-4">
+        <div className="lg:col-span-7 lg:sticky lg:top-4 space-y-3">
+          {/* Gagal memuat log — tampilkan error, bukan "Belum Ada Riwayat Pesan" */}
+          {logsError && (
+            <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+              <div className="flex-1 text-xs text-red-800">
+                <p className="font-semibold">Gagal Memuat Riwayat Pengiriman</p>
+                <p className="mt-0.5 text-red-700">{logsError}</p>
+              </div>
+              <button
+                onClick={() => fetchLogs(logsPage, logsStatus)}
+                disabled={logsLoading}
+                className="shrink-0 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
           <LogsPanel
             logs={logs}
             total={logsTotal}

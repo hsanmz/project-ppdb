@@ -217,13 +217,24 @@ export class SessionManager extends EventEmitter {
       );
     }
 
-    // Pastikan client sudah siap (halaman WA terbuka) sebelum request kode.
+    // Pastikan client sudah diinisialisasi (non-blocking agar tidak deadlock menunggu authenticated)
     if (!this.client || this.sessionInfo.status === "destroyed") {
-      await this.initialize();
+      void this.initialize();
     }
-    if (this.initializePromise) {
-      await this.initializePromise;
+
+    // Tunggu sampai browser membuka halaman login WA (pupPage aktif)
+    const maxWaitMs = 30_000;
+    const start = Date.now();
+    while (!this.client || !(this.client as any).pupPage || this.sessionInfo.status === "initializing") {
+      if (this.isReady()) {
+        throw new Error("WhatsApp sudah terhubung — tidak perlu pairing.");
+      }
+      if (Date.now() - start > maxWaitMs) {
+        throw new Error("Timeout menunggu WhatsApp Web siap untuk pairing code. Silakan coba lagi.");
+      }
+      await new Promise((r) => setTimeout(r, 400));
     }
+
     if (!this.client) {
       throw new Error("WhatsApp client tidak tersedia.");
     }

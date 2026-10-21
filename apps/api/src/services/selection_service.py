@@ -47,6 +47,88 @@ def _is_tiu_category_name(name: str) -> bool:
     return "tiu" in normalized.split() or "intelegensi umum" in normalized
 
 
+def selection_score_gaps(db: Any, applicant: Any) -> list[str]:
+    """Komponen nilai yang belum lengkap untuk sebuah pendaftar.
+
+    Keputusan kelulusan (lulus/tidak lulus) hanya boleh ditetapkan setelah
+    seluruh nilai wajib masuk:
+    - ujian TIU (khusus jalur TIU),
+    - rubrik Tahfidz,
+    - rubrik Wawancara,
+    - seluruh kriteria pada kategori rubrik lain milik gelombang/global.
+
+    Mengembalikan daftar label komponen yang belum lengkap (kosong = lengkap).
+    """
+    from sqlalchemy import and_, or_, select
+
+    from src.services.ppdb_service import is_tiu_path
+
+    wave_id = getattr(applicant, "wave_id", None)
+    stmt = (
+        select(SelectionCategory.name, SelectionScore.score)
+        .join(SelectionCriteria, SelectionCriteria.category_id == SelectionCategory.id)
+        .outerjoin(
+            SelectionScore,
+            and_(
+                SelectionScore.criteria_id == SelectionCriteria.id,
+                SelectionScore.applicant_id == applicant.id,
+            ),
+        )
+        .where(
+            or_(
+                SelectionCategory.wave_id == "global",
+                SelectionCategory.wave_id == wave_id,
+            )
+        )
+        .order_by(SelectionCategory.created_at, SelectionCriteria.created_at)
+    )
+    rows = db.execute(stmt).all()
+
+    scores_by_category: dict[str, list[Any]] = {}
+    for category_name, score in rows:
+        scores_by_category.setdefault(category_name, []).append(score)
+
+    def _label(category_name: str) -> str:
+        low = category_name.casefold()
+        if "tahfidz" in low:
+            return "ujian Tahfidz"
+        if "wawancara" in low:
+            return "ujian Wawancara"
+        return f"rubrik {category_name}"
+
+    gaps: list[str] = []
+
+    # 1. TIU wajib hanya untuk jalur TIU (nilai masuk otomatis via webhook).
+    if is_tiu_path(getattr(applicant, "registration_path", None)):
+        tiu_scores = [
+            score
+            for name, scores in scores_by_category.items()
+            if _is_tiu_category_name(name)
+            for score in scores
+        ]
+        if not any(score is not None for score in tiu_scores):
+            gaps.append("ujian TIU")
+
+    # 2. Seluruh kriteria tiap kategori rubrik harus terisi nilainya.
+    for name, scores in scores_by_category.items():
+        if _is_tiu_category_name(name):
+            continue
+        if not scores or any(score is None for score in scores):
+            gaps.append(_label(name))
+
+    # 3. Rubrik Tahfidz & Wawancara wajib tersedia untuk setiap pendaftar.
+    if not any("tahfidz" in name.casefold() for name in scores_by_category):
+        gaps.append("ujian Tahfidz")
+    if not any("wawancara" in name.casefold() for name in scores_by_category):
+        gaps.append("ujian Wawancara")
+
+    deduped: list[str] = []
+    for gap in gaps:
+        if gap not in deduped:
+            deduped.append(gap)
+    return deduped
+
+
 class SelectionService:
     def __init__(self, repo: SelectionRepository):
         self.repo = repo
@@ -574,6 +656,21 @@ class SelectionService:
 
         if body.status not in ["passed", "failed", "selection"]:
             raise HTTPException(status_code=400, detail="Status tidak valid")
+
+        # Keputusan lulus/tidak lulus baru boleh ditetapkan (atau diubah)
+        # setelah seluruh nilai wajib masuk.
+        if body.status in ("passed", "failed"):
+            gaps = selection_score_gaps(self.repo.db, app)
+            if gaps:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Keputusan kelulusan belum dapat ditetapkan karena "
+                        "nilai belum lengkap: "
+                        + ", ".join(gaps)
+                        + ". Lengkapi seluruh nilai terlebih dahulu."
+                    ),
+                )
 
         app.status = body.status
         app.updated_at = now

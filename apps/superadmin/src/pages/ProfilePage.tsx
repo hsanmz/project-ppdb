@@ -24,7 +24,7 @@ export default function ProfilePage() {
       const data = await api.getSessions()
       setSessions((data as any)?.sessions ?? (data as any) ?? [])
     } catch (err: any) {
-      setSessionsError(err?.message || 'Gagal memuat sesi perangkat.')
+      setSessionsError(api.getErrorMessage(err, 'Gagal memuat sesi perangkat.'))
     } finally {
       setSessionsLoading(false)
       setSessionsRefreshing(false)
@@ -58,7 +58,7 @@ export default function ProfilePage() {
       await loadSessions()
       toast('success', 'Sesi perangkat berhasil diakhiri.')
     } catch (err: any) {
-      toast('error', err?.message || 'Gagal mengakhiri sesi.')
+      toast('error', api.getErrorMessage(err, 'Gagal mengakhiri sesi.'))
     } finally {
       setRevokingId(null)
     }

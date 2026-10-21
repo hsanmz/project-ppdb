@@ -3,7 +3,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { CheckCircle2, Loader2, QrCode, RefreshCw, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { waGetQrRaw, waGetQrSseUrl } from '@/api/client'
+import { waGetQrRaw, waGetQrSseUrl, getErrorMessage } from '@/api/client'
 
 // SSE relevan selama sesi masih "dalam proses" — bukan cuma pas state sudah
 // 'qr'. Dengan begitu event 'qr' dari microservice tertangkap realtime, bukan
@@ -88,7 +88,7 @@ export default function QrPanel({
         setQrError(res?.error || res?.message || 'QR belum tersedia saat ini.')
       }
     } catch (err) {
-      setQrError((err as Error).message)
+      setQrError(getErrorMessage(err, 'QR belum tersedia saat ini.'))
     } finally {
       setQrLoading(false)
     }

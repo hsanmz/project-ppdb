@@ -6,7 +6,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Badge,
   Input,
   Label,
 } from '@/components/ui'
@@ -20,7 +19,8 @@ import {
   PowerOff,
   Radio,
   KeyRound,
-  ShieldAlert,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { waGetQrRaw, waRequestPairingCode, type WAProxyStatus } from '../../api/client'
 import type { LoginMethod } from './constants'
@@ -85,11 +85,21 @@ function getStatusIndicator(statusLabel: string, isReady: boolean) {
   }
 }
 
+function formatPairingCode(code?: string) {
+  if (!code) return ''
+  const clean = code.replace(/[^a-zA-Z0-9]/g, '')
+  if (clean.length === 8) {
+    return `${clean.slice(0, 4)} - ${clean.slice(4)}`
+  }
+  return code
+}
+
 export default function SessionCard(props: Props) {
   const [qr, setQr] = useState('')
   const [phone, setPhone] = useState('')
   const [pairingLoading, setPairingLoading] = useState(false)
   const [pairingError, setPairingError] = useState('')
+  const [copiedCode, setCopiedCode] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -127,6 +137,12 @@ export default function SessionCard(props: Props) {
     } finally {
       setPairingLoading(false)
     }
+  }
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(true)
+    setTimeout(() => setCopiedCode(false), 2000)
   }
 
   const { badge } = getStatusIndicator(props.statusLabel, props.isReady)
@@ -221,7 +237,7 @@ export default function SessionCard(props: Props) {
                 ) : (
                   <div className="py-4 space-y-3">
                     <p className="text-xs text-slate-500">
-                      Sesi belum aktif. Klik tombol di bawah untuk meminta kode QR.
+                      Sesi belum aktif. Klik tombol di bawah untuk memulai sesi WhatsApp.
                     </p>
                     <Button
                       onClick={props.onInit}
@@ -240,11 +256,11 @@ export default function SessionCard(props: Props) {
             {props.loginMethod === 'phone' && (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 space-y-3">
                 <div>
-                  <Label htmlFor="wa-pair-phone" className="text-xs font-medium">
+                  <Label htmlFor="wa-pair-phone" className="text-xs font-semibold text-slate-800">
                     Nomor WhatsApp Pengirim
                   </Label>
-                  <p className="text-[11px] text-muted-foreground mb-1.5">
-                    Gunakan format internasional tanpa spasi atau strip (contoh: 6281234567890).
+                  <p className="text-[11px] text-muted-foreground mt-0.5 mb-2">
+                    Masukkan nomor HP WhatsApp (contoh: <code>081234567890</code> atau <code>6281234567890</code>).
                   </p>
                   <div className="flex gap-2">
                     <Input
@@ -254,33 +270,52 @@ export default function SessionCard(props: Props) {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                       placeholder="6281234567890"
-                      className="h-8 text-xs font-mono"
+                      className="h-8.5 text-xs font-mono bg-white"
+                      disabled={pairingLoading}
                     />
                     <Button
                       size="sm"
                       onClick={() => void requestCode()}
-                      disabled={pairingLoading || !phone.trim() || !props.isActive}
-                      className="h-8 px-3 text-xs shrink-0 gap-1"
+                      disabled={pairingLoading || !phone.trim() || props.isReady}
+                      className="h-8.5 px-3 text-xs shrink-0 gap-1.5"
                     >
-                      <KeyRound className="h-3 w-3" />
-                      {pairingLoading ? 'Meminta...' : 'Minta Kode'}
+                      <KeyRound className={`h-3.5 w-3.5 ${pairingLoading ? 'animate-spin' : ''}`} />
+                      {pairingLoading ? 'Meminta Kode...' : 'Minta Kode'}
                     </Button>
                   </div>
                 </div>
 
                 {props.session?.pairingCode && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center space-y-1">
-                    <p className="text-[11px] font-semibold text-emerald-800">
-                      Masukkan Kode Pairing Ini di Ponsel:
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50/90 p-4 text-center space-y-2.5 shadow-2xs">
+                    <p className="text-xs font-semibold text-emerald-900">
+                      Masukkan Kode Pairing Ini di WhatsApp Ponsel:
                     </p>
-                    <p className="font-mono text-2xl font-bold tracking-widest text-emerald-700">
-                      {props.session.pairingCode}
-                    </p>
+                    <div className="flex items-center justify-center gap-2">
+                      <p className="font-mono text-3xl font-extrabold tracking-widest text-emerald-800 select-all">
+                        {formatPairingCode(props.session.pairingCode)}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2.5 text-xs bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-800"
+                        onClick={() => copyCode(props.session?.pairingCode || '')}
+                      >
+                        {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                    <div className="rounded-lg bg-white/90 p-2.5 text-left text-[11px] text-slate-700 space-y-1 border border-emerald-100">
+                      <p className="font-semibold text-emerald-950">Langkah di Ponsel:</p>
+                      <ol className="list-decimal list-inside space-y-0.5 text-slate-600">
+                        <li>Buka WhatsApp &rarr; <b>Perangkat Tertaut</b> &rarr; <b>Tautkan Perangkat</b></li>
+                        <li>Ketuk opsi <b>Tautkan dengan nomor telepon saja</b> di bawah layar</li>
+                        <li>Masukkan 8 karakter kode pairing di atas</li>
+                      </ol>
+                    </div>
                   </div>
                 )}
 
                 {pairingError && (
-                  <p className="text-xs text-rose-600 bg-rose-50 p-2 rounded border border-rose-200">
+                  <p className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                     {pairingError}
                   </p>
                 )}

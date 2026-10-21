@@ -15,6 +15,7 @@ import {
 } from "@/components/ui"
 import { Skeleton } from "@/components/ui"
 import { EmptyState } from "@/components/ui"
+import { ErrorState } from "@/components/ui"
 
 export default function UsersPage() {
   const navigate = useNavigate()
@@ -33,7 +34,13 @@ export default function UsersPage() {
     }
   }, [currentUser, authLoading, canView, navigate])
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
+  const {
+    data: usersData,
+    isLoading: usersLoading,
+    isError: usersError,
+    error: usersErr,
+    refetch: refetchUsers,
+  } = useQuery({
     queryKey: ['users', search, page],
     queryFn: async () => {
       const res = await api.getUsers({ search: search || undefined, page, per_page: perPage })
@@ -61,7 +68,7 @@ export default function UsersPage() {
     }
   }, [page, totalPages])
 
-  const { data: roles = [] } = useQuery({
+  const { data: roles = [], isError: rolesError } = useQuery({
     queryKey: ['roles'],
     queryFn: api.getRoles,
     enabled: !!canView && !authLoading,
@@ -121,6 +128,13 @@ export default function UsersPage() {
         />
       </div>
 
+      {/* Query gagal: tampil sebagai error, BUKAN EmptyState "Belum Ada User" */}
+      {rolesError && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          Nama role tidak dapat dimuat — kolom Role akan tampil "—" sampai reload berhasil.
+        </p>
+      )}
+
       {/* Table */}
       {usersLoading ? (
         <Card className="p-6">
@@ -135,6 +149,12 @@ export default function UsersPage() {
             ))}
           </div>
         </Card>
+      ) : usersError ? (
+        <ErrorState
+          status={api.isApiError(usersErr) ? usersErr.status : 500}
+          retry={() => refetchUsers()}
+          fullscreen={false}
+        />
       ) : users.length === 0 ? (
         <EmptyState
           icon={UserRound}

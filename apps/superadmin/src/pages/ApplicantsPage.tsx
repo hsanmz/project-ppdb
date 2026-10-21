@@ -150,7 +150,7 @@ export default function ApplicantsPage() {
         setApplicants(res?.data || [])
         setTotal(newestTotal)
       } catch (e: any) {
-        toast('error', e.message || 'Gagal memuat pendaftar')
+        toast('error', api.getErrorMessage(e, 'Gagal memuat pendaftar'))
       } finally {
         setLoading(false)
       }
@@ -198,7 +198,7 @@ export default function ApplicantsPage() {
     api
       .getApplicant(a.id)
       .then((full: any) => setDetail(full))
-      .catch((e: any) => toast('error', e.message || 'Gagal memuat detail'))
+      .catch((e: any) => toast('error', api.getErrorMessage(e, 'Gagal memuat detail')))
       .finally(() => setDetailLoading(false))
   }
 
@@ -225,7 +225,7 @@ export default function ApplicantsPage() {
       }
       fetchApplicants()
     } catch (err: any) {
-      toast('error', err.message || 'Gagal menyimpan pendaftar')
+      toast('error', api.getErrorMessage(err, 'Gagal menyimpan pendaftar'))
     } finally {
       setSaving(false)
     }
@@ -242,7 +242,7 @@ export default function ApplicantsPage() {
       if (applicants.length === 1 && page > 1) setPage(page - 1)
       fetchApplicants()
     } catch (err: any) {
-      toast('error', err.message || 'Gagal menghapus pendaftar')
+      toast('error', api.getErrorMessage(err, 'Gagal menghapus pendaftar'))
     } finally {
       setDeleting(false)
     }
@@ -276,7 +276,7 @@ export default function ApplicantsPage() {
         setResetOpen(false)
       }
     } catch (err: any) {
-      toast('error', err.message || 'Gagal mereset password')
+      toast('error', api.getErrorMessage(err, 'Gagal mereset password'))
     } finally {
       setResetting(false)
     }

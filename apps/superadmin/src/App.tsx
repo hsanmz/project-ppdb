@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from 'react-error-boundary'
 import { ErrorState } from '@repo/ui'
 import { AuthProvider } from './contexts/AuthContext'
@@ -19,6 +19,26 @@ import NotificationsPage from './pages/NotificationsPage'
 import WhatsAppPage from './pages/WhatsAppPage'
 import NotFoundPage from './pages/NotFoundPage'
 import * as api from './api/client'
+
+/**
+ * Error boundary per-rute: satu crash di satu halaman tidak menghabiskan
+ * seluruh UI (sidebar & shell tetap hidup), dan otomatis reset saat user
+ * pindah rute berkat `resetKeys` pathname.
+ */
+function RouteErrorBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  return (
+    <ErrorBoundary
+      resetKeys={[location.pathname]}
+      onError={(error) => console.error('[superadmin:render]', error)}
+      fallbackRender={({ resetErrorBoundary }) => (
+        <ErrorState status={500} retry={resetErrorBoundary} fullscreen={false} />
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  )
+}
 
 export default function App() {
   useEffect(() => {
@@ -43,7 +63,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary
-        fallbackRender={({ error, resetErrorBoundary }) => (
+        onError={(error) => console.error('[superadmin:boundary]', error)}
+        fallbackRender={({ resetErrorBoundary }) => (
           <ErrorState status={500} retry={resetErrorBoundary} fullscreen={false} />
         )}
       >
@@ -59,6 +80,7 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Layout>
+                  <RouteErrorBoundary>
                   <Routes>
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
@@ -75,6 +97,7 @@ export default function App() {
                     <Route path="/whatsapp" element={<WhatsAppPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
+                  </RouteErrorBoundary>
                 </Layout>
               </ProtectedRoute>
             }

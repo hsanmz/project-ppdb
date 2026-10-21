@@ -107,6 +107,7 @@ class UserService:
             "user_type": user.user_type,
             "role_id": user.role_id,
             "is_active": user.is_active,
+            "avatar_url": getattr(user, "avatar_url", "") or "",
             "created_at": user.created_at.strftime("%Y-%m-%d %H:%M:%S")
             if user.created_at
             else None,

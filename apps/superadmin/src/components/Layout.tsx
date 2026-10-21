@@ -78,6 +78,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         role: 'Superadmin',
       }}
       onProfile={() => navigate('/profile')}
+      contentClassName={
+        location.pathname.startsWith('/whatsapp')
+          ? 'no-scrollbar'
+          : location.pathname.startsWith('/users/')
+            ? 'overflow-hidden no-scrollbar h-[calc(100dvh-3.5rem)]'
+            : undefined
+      }
       onLogout={handleLogout}
     >
       {children}
