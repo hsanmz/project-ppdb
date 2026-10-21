@@ -503,9 +503,10 @@ interface TemplateTabProps {
   loading: boolean
   /** Dipanggil setelah simpan agar parent refresh state-nya. */
   onRefresh: () => void
+  canCrud?: boolean
 }
 
-function TemplateTab({ templates, loading, onRefresh }: TemplateTabProps) {
+function TemplateTab({ templates, loading, onRefresh, canCrud = true }: TemplateTabProps) {
   const [editTarget, setEditTarget] = useState<Template | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [phaseFilter, setPhaseFilter] = useState('')

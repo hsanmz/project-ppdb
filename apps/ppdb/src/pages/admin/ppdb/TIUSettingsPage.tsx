@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   KeyRound, Save, Timer, Link as LinkIcon, Info,
   CheckCircle2, AlertCircle, Eye, EyeOff, Copy, Check,
+  ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { apiFetch } from '@/api/client'
 import { useToast } from '@/components/Toast'
 import { useCanPage } from '@/hooks/useCan'
 import { Button, Card, CardContent, Input, Label, Badge } from '@/components/ui'
 import { DocTrigger } from '@repo/ui'
+import TIUVerificationModal from './components/TIUVerificationModal'
 
 type TIUSettings = {
   google_form_url: string
@@ -25,6 +27,17 @@ export default function TIUSettingsPage() {
   const [webhookSecret, setWebhookSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
+
+  const formUrlRef = useRef<HTMLInputElement>(null)
+  const durationRef = useRef<HTMLInputElement>(null)
+  const secretRef = useRef<HTMLInputElement>(null)
+
+  const handleFixField = (field: 'url' | 'duration' | 'secret') => {
+    if (field === 'url') formUrlRef.current?.focus()
+    if (field === 'duration') durationRef.current?.focus()
+    if (field === 'secret') secretRef.current?.focus()
+  }
 
   const settingsQuery = useQuery({
     queryKey: ['ppdb-tiu-settings'],
@@ -165,6 +178,7 @@ export default function TIUSettingsPage() {
                 <span className="text-rose-500">*</span>
               </Label>
               <Input
+                ref={formUrlRef}
                 id="tiu-form-url"
                 type="url"
                 value={formUrl}
@@ -189,8 +203,9 @@ export default function TIUSettingsPage() {
                   Durasi Ujian
                   <span className="text-rose-500">*</span>
                 </Label>
-                <div className="flex items-center gap-2">
+                <div className="relative w-fit">
                   <Input
+                    ref={durationRef}
                     id="tiu-duration"
                     type="number"
                     min={1}
@@ -198,9 +213,11 @@ export default function TIUSettingsPage() {
                     value={duration}
                     onChange={e => setDuration(e.target.value)}
                     disabled={!canCrud || settingsQuery.isLoading || saveSettings.isPending}
-                    className="w-24 text-center font-bold text-sm"
+                    className="w-24 pr-10 text-center font-bold text-sm"
                   />
-                  <span className="text-xs text-muted-foreground font-medium">menit</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium select-none pointer-events-none">
+                    menit
+                  </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   Jawaban melewati batas waktu otomatis ditolak oleh sistem.
@@ -215,6 +232,7 @@ export default function TIUSettingsPage() {
                 </Label>
                 <div className="relative">
                   <Input
+                    ref={secretRef}
                     id="tiu-secret"
                     type={showSecret ? 'text' : 'password'}
                     autoComplete="new-password"
@@ -243,24 +261,39 @@ export default function TIUSettingsPage() {
             </div>
 
             {/* Simpan Footer */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-[11px] text-muted-foreground">
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVerifyOpen(true)}
+                    className="gap-1.5 h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer flex-1 sm:flex-none"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Uji Koneksi & Verifikasi
+                  </Button>
+                  {canCrud && (
+                    <Button
+                      size="sm"
+                      onClick={() => saveSettings.mutate()}
+                      disabled={
+                        settingsQuery.isLoading ||
+                        saveSettings.isPending ||
+                        !isFormValid
+                      }
+                      className="gap-1.5 h-8 px-3.5 text-xs font-medium flex-1 sm:flex-none"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground text-right">
                 Perubahan langsung berlaku ke seluruh pendaftaran aktif.
               </p>
-              {canCrud && (
-                <Button
-                  onClick={() => saveSettings.mutate()}
-                  disabled={
-                    settingsQuery.isLoading ||
-                    saveSettings.isPending ||
-                    !isFormValid
-                  }
-                  className="gap-2 h-9 px-5 text-xs font-semibold w-full sm:w-auto shrink-0"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
-                </Button>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -374,6 +407,18 @@ export default function TIUSettingsPage() {
           </div>
         </div>
       </aside>
+
+      <TIUVerificationModal
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        formData={{
+          googleFormUrl: formUrl,
+          durationMinutes: duration,
+          webhookSecret: webhookSecret,
+        }}
+        onFixField={handleFixField}
+        onSave={() => saveSettings.mutate()}
+      />
     </div>
   )
 }

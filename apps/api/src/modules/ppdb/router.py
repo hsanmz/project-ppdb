@@ -41,6 +41,8 @@ from src.modules.ppdb.schemas import (
     PeriodCreate,
     PeriodUpdate,
     TIUSettingsUpdate,
+    TIUVerificationRequest,
+    TIUVerificationResponse,
     WaveCreate,
     WaveFeeItemCreate,
     WaveFeeItemUpdate,
@@ -129,6 +131,22 @@ def update_tiu_settings(
             body.webhook_secret or settings.tiu_webhook_secret
         ),
     }
+
+
+@router.post("/tiu-settings/verify", response_model=TIUVerificationResponse)
+def verify_tiu_settings(
+    body: TIUVerificationRequest | None = None,
+    user: dict = Depends(require_ppdb_admin),
+    db: Session = Depends(get_db),
+):
+    from src.services.tiu_verification_service import TIUVerificationService
+
+    svc = TIUVerificationService(db)
+    return svc.verify(
+        google_form_url=body.google_form_url if body else None,
+        duration_minutes=body.duration_minutes if body else None,
+        webhook_secret=body.webhook_secret if body else None,
+    )
 
 
 class TIUWebhookPayload(BaseModel):

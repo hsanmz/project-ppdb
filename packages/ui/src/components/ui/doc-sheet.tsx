@@ -564,7 +564,7 @@ export const SYSTEM_DOCS: Record<string, DocItem> = {
               <strong className="text-slate-900 block mb-0.5">2. Durasi Ujian (Menit):</strong>
               <p className="mb-1">Bukan timer tampilan Google Form, tetapi <strong>validasi server-side guard</strong>.</p>
               <p className="mb-1">Saat file <code>.seb</code> diunduh, server mencatat <strong>waktu mulai</strong> (<code>created_at</code>). Webhook akan menolak submit jika:</p>
-              <code className="bg-white px-1.5 py-0.5 rounded text-slate-800">waktu_submit &gt; waktu_mulai + durasi_menit + 5_menit_toleransi</code>
+              <code className="bg-white px-1.5 py-0.5 rounded text-slate-800">{'waktu_submit > waktu_mulai + durasi_menit + 5_menit_toleransi'}</code>
               <p className="mt-1">Ditolak dengan HTTP 400 & nilai <strong>tidak</strong> tersimpan. Timer di Google Form hanya bersifat visual/pengingat.</p>
             </div>
             <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">

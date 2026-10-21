@@ -11,14 +11,14 @@ export function useCanPage(pageKey: string) {
   }
 }
 
-export function useCan(module: string, level: AccessLevel = 'crud', pageKey?: string) {
+export function useCan(module: string, _level?: AccessLevel, pageKey?: string) {
   const { hasModuleAccess, isSuperadmin, permissions, canCrudPage } = usePermission()
   const pageCrud = pageKey ? canCrudPage(pageKey) : true
   return {
     level: (permissions?.[module] || 'none') as string,
-    canAccess: hasModuleAccess(module, level),
-    canCrud: isSuperadmin || (hasModuleAccess(module, 'crud') && pageCrud),
-    canRead: hasModuleAccess(module, 'read'),
+    canAccess: hasModuleAccess(module),
+    canCrud: isSuperadmin || (hasModuleAccess(module) && pageCrud),
+    canRead: hasModuleAccess(module),
     isSuperadmin,
   }
 }

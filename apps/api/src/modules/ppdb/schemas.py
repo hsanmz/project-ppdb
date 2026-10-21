@@ -44,6 +44,33 @@ class TIUSettingsUpdate(BaseModel):
         return value.strip()
 
 
+class TIUVerificationRequest(BaseModel):
+    google_form_url: str | None = None
+    duration_minutes: int | None = None
+    webhook_secret: str | None = None
+
+
+class TIUCheckItem(BaseModel):
+    key: str
+    status: str
+    label: str
+    detail: str
+    fix: str | None = None
+
+
+class TIUVerificationSummary(BaseModel):
+    passed: int
+    failed: int
+    warn: int
+
+
+class TIUVerificationResponse(BaseModel):
+    overall: str
+    checks: list[TIUCheckItem]
+    summary: TIUVerificationSummary
+    recommendations: list[str]
+
+
 class TIUQuestionInput(BaseModel):
     model_config = {"extra": "forbid"}
 

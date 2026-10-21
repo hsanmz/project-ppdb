@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { CheckCircle, FileText, Upload, AlertCircle, Info, Award, BookOpen, GraduationCap } from 'lucide-react'
+import { CheckCircle, FileText, Upload, AlertCircle, Info, Award, BookOpen, GraduationCap, ShieldCheck, ExternalLink } from 'lucide-react'
 import { Badge, Button, Card, CardContent } from '@/components/ui'
 import { getDocumentsForPath, type DocumentSpec } from '@/constants/documents'
 import * as api from '@/api/client'
@@ -79,8 +79,9 @@ export default function DocumentUploadStep({
     return mandatoryDocs.filter((d: any) => !uploadedDocMap.has(d.name))
   }, [mandatoryDocs, uploadedDocMap])
 
+  const isApproved = ['document_approved', 'selection', 'passed'].includes(applicant?.status)
   const isPendingOrRejected = ['document_uploaded_pending', 'document_rejected'].includes(applicant?.status)
-  const canSubmit = missingMandatory.length === 0 && isPendingOrRejected
+  const canSubmit = missingMandatory.length === 0 && isPendingOrRejected && !isApproved
 
   // Header banner info khusus jalur
   const pathBanner = useMemo(() => {
@@ -122,6 +123,26 @@ export default function DocumentUploadStep({
 
   return (
     <div className="space-y-4">
+      {/* Banner Dokumen Terverifikasi & Disetujui (Completed State) */}
+      {isApproved && (
+        <Card className="border-emerald-200 bg-emerald-50/80 shadow-sm">
+          <CardContent className="p-4 sm:p-5 flex items-start gap-3">
+            <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-semibold text-emerald-900 text-sm">Seluruh Dokumen Persyaratan Terverifikasi</h4>
+                <Badge variant="success" className="text-[10px] font-semibold">Lolos Verifikasi</Badge>
+              </div>
+              <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                Berkas pendaftaran Anda telah diperiksa dan disetujui resmi oleh Panitia PPDB Ar-Rahman. Seluruh berkas telah dikunci untuk arsip seleksi penerimaan santri baru.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Kartu Alasan Ditolak jika Status document_rejected */}
       {applicant?.status === 'document_rejected' && (
         <Card className="border-red-200 bg-red-50/50 shadow-sm">
@@ -140,7 +161,7 @@ export default function DocumentUploadStep({
         </Card>
       )}
 
-            {/* Path Requirement Banner */}
+      {/* Path Requirement Banner */}
       <div className={`p-4 rounded-xl border flex items-start gap-3 ${pathBanner.bg}`}>
         <pathBanner.icon className={`w-5 h-5 shrink-0 mt-0.5 ${pathBanner.iconColor}`} />
         <div className="text-sm">
@@ -179,7 +200,9 @@ export default function DocumentUploadStep({
                         <Badge variant="destructive" className="text-[10px] font-medium px-2 py-0 h-5">Wajib</Badge>
                       )}
                       {uploaded ? (
-                        <Badge variant="success" className="text-[10px] font-normal px-2 py-0 h-5">Terunggah</Badge>
+                        <Badge variant="success" className="text-[10px] font-medium px-2 py-0 h-5">
+                          {isApproved ? 'Terverifikasi' : 'Terunggah'}
+                        </Badge>
                       ) : (
                         <Badge variant="outline" className="text-[10px] font-normal px-2 py-0 h-5 text-slate-500">Belum diunggah</Badge>
                       )}
@@ -195,18 +218,35 @@ export default function DocumentUploadStep({
                   </div>
                 </div>
                 <div className="shrink-0 relative w-full sm:w-auto">
-                  <input
-                    type="file"
-                    id={`doc-upload-${idx}`}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-                    accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(e) => handleUpload(doc.name, e)}
-                    disabled={isUploading || !isPendingOrRejected}
-                  />
-                  <Button size="sm" variant={uploaded ? "outline" : "default"} className="w-full sm:w-auto h-10 sm:h-9 gap-2 pointer-events-none" disabled={isUploading || !isPendingOrRejected}>
-                    {isUploading ? <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" /> : <Upload className="h-3.5 w-3.5" />}
-                    {isUploading ? 'Mengunggah...' : uploaded ? 'Ganti Berkas' : 'Upload Berkas'}
-                  </Button>
+                  {isApproved ? (
+                    uploaded ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full sm:w-auto h-9 gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-medium"
+                        onClick={() => window.open(uploaded.public_url, '_blank')}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Buka Berkas
+                      </Button>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs py-1 px-2.5">Tidak Diperlukan</Badge>
+                    )
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        id={`doc-upload-${idx}`}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => handleUpload(doc.name, e)}
+                        disabled={isUploading || !isPendingOrRejected}
+                      />
+                      <Button size="sm" variant={uploaded ? "outline" : "default"} className="w-full sm:w-auto h-10 sm:h-9 gap-2 pointer-events-none" disabled={isUploading || !isPendingOrRejected}>
+                        {isUploading ? <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" /> : <Upload className="h-3.5 w-3.5" />}
+                        {isUploading ? 'Mengunggah...' : uploaded ? 'Ganti Berkas' : 'Upload Berkas'}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -217,7 +257,12 @@ export default function DocumentUploadStep({
       {/* Info Validasi Kelengkapan Dokumen */}
       <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t">
         <div className="text-xs min-w-0 flex-1">
-          {missingMandatory.length > 0 ? (
+          {isApproved ? (
+            <span className="text-emerald-800 font-semibold flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+              Status: Seluruh berkas persyaratan telah divalidasi dan disetujui panitia.
+            </span>
+          ) : missingMandatory.length > 0 ? (
             <span className="text-amber-700 font-medium flex items-start sm:items-center gap-1.5">
               <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5 sm:mt-0" />
               <span className="break-words">Masih ada {missingMandatory.length} dokumen wajib yang belum diunggah: <strong>{missingMandatory.map(d => d.name).join(', ')}</strong></span>
@@ -230,15 +275,21 @@ export default function DocumentUploadStep({
           )}
         </div>
 
-        <Button
-          disabled={!canSubmit}
-          onClick={onSubmitRequest}
-          className="w-full sm:w-auto h-11 sm:h-10 font-bold"
-        >
-          {applicant?.status === 'document_uploaded_pending' ? 'Kirim' :
-           applicant?.status === 'document_rejected' ? 'Kirim Ulang' :
-           'Menunggu Review'}
-        </Button>
+        {isApproved ? (
+          <Badge variant="success" className="py-2 px-3.5 text-xs font-semibold gap-1.5 self-start sm:self-auto h-10 sm:h-9">
+            <ShieldCheck className="w-4 h-4" /> Dokumen Terverifikasi
+          </Badge>
+        ) : (
+          <Button
+            disabled={!canSubmit}
+            onClick={onSubmitRequest}
+            className="w-full sm:w-auto h-11 sm:h-10 font-bold"
+          >
+            {applicant?.status === 'document_uploaded_pending' ? 'Kirim' :
+             applicant?.status === 'document_rejected' ? 'Kirim Ulang' :
+             'Menunggu Review'}
+          </Button>
+        )}
       </div>
     </div>
   )
