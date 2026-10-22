@@ -1,0 +1,224 @@
+# ============================================================
+# PTDARRAHMAN — PRODUCTION DOCKER COMPOSE (VPS Linux)
+# ============================================================
+# Berbeda dari docker-compose.yml (pola WSL2 single-host / preview),
+# file ini adalah topologi PRODUCTION di server publik:
+#
+#   Internet ──► nginx (80/443, TLS Let's Encrypt, satu-satunya port publik)
+#                 ├── <DOMAIN_COMPANYPROFILE> → companyprofile:3000 (Next.js)
+#                 ├── <DOMAIN_PPDB>           → berkas statis (vite build)
+#                 ├── <DOMAIN_SUPERADMIN>     → berkas statis (vite build)
+#                 └── <DOMAIN_API>            → api:8000 (FastAPI)
+#               api ──► MySQL remote (apps/api/.env) + redis:6379
+#               whatsapp ──► redis + api (internal, tanpa port publik)
+#
+# Tidak ada satu pun port aplikasi yang dibuka ke host selain 80/443:
+# api, companyprofile, whatsapp, dan redis hanya bisa diakses via jaringan
+# internal Docker (di-depan-i nginx).
+#
+# Pakai:
+#   cp .env.prod.example .env.prod
+#   # isi DOMAIN_* + PUBLIC_* + LETSENCRYPT_EMAIL di .env.prod
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# Detail lengkap: docs/DOCKER_PRODUCTION.md
+# ============================================================
+
+name: ptarrahman-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ── Edge: nginx + static ppdb/superadmin + TLS + reverse proxy ─────────────
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL wajib diisi di .env.prod}
+        VITE_COMPANY_PROFILE_URL: ${PUBLIC_COMPANYPROFILE_URL:?PUBLIC_COMPANYPROFILE_URL wajib diisi di .env.prod}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN_COMPANYPROFILE: ${DOMAIN_COMPANYPROFILE:?DOMAIN_COMPANYPROFILE wajib diisi di .env.prod}
+      DOMAIN_PPDB: ${DOMAIN_PPDB:?DOMAIN_PPDB wajib diisi di .env.prod}
+      DOMAIN_SUPERADMIN: ${DOMAIN_SUPERADMIN:?DOMAIN_SUPERADMIN wajib diisi di .env.prod}
+      DOMAIN_API: ${DOMAIN_API:?DOMAIN_API wajib diisi di .env.prod}
+    volumes:
+      # Sertifikat Let's Encrypt (dibuat & di-renew oleh service `certbot`).
+      - certbot_certs:/etc/letsencrypt:ro
+      # Webroot ACME — harus sama dengan volume pada service `certbot`.
+      - certbot_www:/var/www/certbot
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      api:
+        condition: service_started
+      companyprofile:
+        condition: service_started
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Company Profile (Next.js) — hanya diakses via nginx ────────────────────
+  companyprofile:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.companyprofile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL wajib diisi di .env.prod}
+        NEXT_PUBLIC_PORTAL_URL: ${PUBLIC_PPDB_URL:?PUBLIC_PPDB_URL wajib diisi di .env.prod}
+        NEXT_PUBLIC_FALLBACK_API_URL: ${PUBLIC_FALLBACK_API_URL:-}
+    environment:
+      NODE_ENV: production
+      # Dikirim ulang saat runtime agar server-side render (SSR) membaca nilai sama.
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL}
+      NEXT_PUBLIC_PORTAL_URL: ${PUBLIC_PPDB_URL}
+      NEXT_PUBLIC_FALLBACK_API_URL: ${PUBLIC_FALLBACK_API_URL:-}
+    expose:
+      - "3000"
+    restart: unless-stopped
+    init: true
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    logging: *default-logging
+
+  # ── Backend (FastAPI) — hanya diakses via nginx ────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    env_file:
+      - ./apps/api/.env
+    environment:
+      # Override internal Docker networking. Nilai app-level lain (DB, Pakasir,
+      # CORS, JWT) tetap dibaca dari apps/api/.env.
+      APP_ENV: ${APP_ENV:-production}
+      WA_SERVICE_URL: http://whatsapp:3100
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - uploads_data:/app/uploads
+    expose:
+      - "8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Longgar: startup menunggu MySQL remote siap (retry s/d 90s di src/main.py).
+      start_period: 150s
+    logging: *default-logging
+
+  # ── WhatsApp bridge (whatsapp-web.js + Chromium) — internal only ───────────
+  whatsapp:
+    build:
+      context: ./apps/whatsapp
+      dockerfile: Dockerfile
+    env_file:
+      - ./apps/whatsapp/.env
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "1"
+      WEBHOOK_URL: http://api:8000/notifications/webhook/whatsapp
+    volumes:
+      # WAJIB: sesi WhatsApp tersimpan di sini. Menghapus volume = scan QR ulang.
+      - wa_session:/app/wa-session
+      - wa_logs:/app/logs
+    expose:
+      - "3100"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    restart: unless-stopped
+    init: true
+    shm_size: "256mb"
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3100/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  # ── Redis (cache + queue BullMQ) — internal only ───────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory 192mb
+        --maxmemory-policy noeviction
+        --save 60 1
+        --loglevel notice
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    # WAJIB > --maxmemory (192mb): sisakan ruang untuk overhead, AOF buffer,
+    # dan fork child saat BGSAVE. Kalau sama, cgroup OOM-kill duluan sehingga
+    # Redis tidak pernah shutdown bersih.
+    mem_limit: 256m
+    logging: *default-logging
+
+  # ── Certbot (renew berkala) — penerbitan awal via docs/scripts ─────────────
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  redis_data:
+    driver: local
+  wa_session:
+    driver: local
+  wa_logs:
+    driver: local
+  uploads_data:
+    driver: local
+  certbot_certs:
+    driver: local
+  certbot_www:
+    driver: local
+  nginx_logs:
+    driver: local

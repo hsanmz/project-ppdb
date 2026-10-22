@@ -26,6 +26,7 @@ from src.models.ppdb import (
 from src.modules.ppdb.schemas import (
     ApplicantAdminCreate,
     ApplicantAdminUpdate,
+    ApplicantProfileUpdate,
     ApplicantRegister,
     PeriodCreate,
     PeriodUpdate,
@@ -1741,6 +1742,14 @@ class PPDBService:
             else None
         )
 
+        # Kelengkapan nilai — menentukan apakah keputusan kelulusan boleh ditetapkan.
+        from src.services.selection_service import selection_score_gaps
+
+        app_obj = self.repository.db.get(PPDBApplicant, applicant_id)
+        missing_scores = (
+            selection_score_gaps(self.repository.db, app_obj) if app_obj else []
+        )
+
         return {
             "applicant": applicant,
             "tiu_score": applicant.get("tiu_score"),
@@ -1750,6 +1759,8 @@ class PPDBService:
             "graduation_status": sel_res.graduation_status
             if sel_res
             else applicant.get("status"),
+            "missing_scores": missing_scores,
+            "scores_complete": not missing_scores,
             "issued_at": datetime.now(WIB).isoformat(),
         }
 
@@ -1902,7 +1913,7 @@ class PPDBService:
             "academic_year": academic_year,
             "admission_officer": admission_officer,
             "director_name": "Ust. Dr. H. Abdurrahman, M.A.",
-            "location": "Bogor",
+            "location": "Bekasi",
             "date_str": letter_date_str,
             "applicant": applicant,
             "fee_items": fee_items,
@@ -2441,3 +2452,92 @@ class PPDBService:
         zip_name = applicant.get("full_name", "pendaftar").replace(" ", "_")
         zip_filename = f"dossier_{zip_name}_{applicant_id[:8]}.zip"
         return buffer.getvalue(), zip_filename
+
+    def get_my_applicant_profile(self, user_id: str) -> dict[str, Any]:
+        """Ambil data lengkap formulir pendaftar untuk halaman Profile."""
+        applicant = self.repository.get_applicant_by_user_id(user_id)
+        if not applicant:
+            raise HTTPException(
+                status_code=404, detail="Data pendaftar tidak ditemukan"
+            )
+
+        detail = self.repository.get_applicant_detail(applicant.id)
+        if not detail:
+            raise HTTPException(
+                status_code=404, detail="Detail pendaftar tidak ditemukan"
+            )
+
+        user = self.repository.get_user_by_id(user_id)
+        if user:
+            detail["avatar_url"] = user.avatar_url or ""
+
+        # Aturan bisnis: setelah lulus tes / LoA terbit, formulir dikunci
+        is_locked = bool(applicant.status == "passed")
+        detail["is_locked"] = is_locked
+        detail["lock_reason"] = (
+            "Data formulir pendaftaran sudah dikunci dan tidak dapat diubah "
+            "karena Anda telah dinyatakan lulus seleksi dan Surat "
+            "Penerimaan (LoA) telah diterbitkan."
+            if is_locked
+            else None
+        )
+        return {"applicant": detail}
+
+    def update_my_applicant_profile(
+        self, user_id: str, body: ApplicantProfileUpdate
+    ) -> dict[str, Any]:
+        """Pembaruan data formulir pendaftaran oleh calon santri.
+
+        Dapat diubah selama proses seleksi berlangsung hingga pendaftar dinyatakan
+        lulus seleksi (Surat Penerimaan / LoA terbit). Setelah LoA terbit, data dikunci.
+        """
+        applicant = self.repository.get_applicant_by_user_id(user_id)
+        if not applicant:
+            raise HTTPException(
+                status_code=404, detail="Data pendaftar tidak ditemukan"
+            )
+
+        # Aturan bisnis: setelah lulus tes / LoA terbit, tidak bisa ubah data formulir
+        if applicant.status == "passed":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Data formulir pendaftaran sudah dikunci dan tidak dapat "
+                    "diubah karena Anda telah dinyatakan lulus seleksi dan "
+                    "Surat Penerimaan (LoA) telah diterbitkan."
+                ),
+            )
+
+        data = body.model_dump(exclude_unset=True)
+        if not data:
+            return {
+                "success": True,
+                "message": "Tidak ada perubahan",
+                "applicant": self.get_my_applicant_profile(user_id)["applicant"],
+            }
+
+        for key, value in data.items():
+            if hasattr(applicant, key):
+                setattr(applicant, key, value)
+
+        applicant.updated_at = datetime.now(WIB)
+        self.repository.update_applicant(applicant)
+
+        # Sinkronkan perubahan nama atau nomor WA ke tabel akun login (users)
+        user = self.repository.get_user_by_id(user_id)
+        if user:
+            if "full_name" in data and data["full_name"]:
+                user.full_name = data["full_name"]
+            if "phone" in data and data["phone"]:
+                user.phone = data["phone"]
+            user.updated_at = datetime.now(WIB)
+            self.repository.db.commit()
+            from src.core.cache import invalidate_user_cache
+
+            invalidate_user_cache(user_id)
+
+        return {
+            "success": True,
+            "message": "Data formulir pendaftaran berhasil diperbarui",
+            "applicant": self.get_my_applicant_profile(user_id)["applicant"],
+        }

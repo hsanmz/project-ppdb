@@ -36,9 +36,16 @@ export function createApp(): express.Application {
       origin: (origin, cb) => {
         // Allow no-origin (curl, internal requests) and localhost patterns
         if (!origin) return cb(null, true);
+        const rawCors = process.env.CORS_ORIGINS || "";
+        const explicitOrigins = rawCors ? rawCors.split(",").map((s) => s.trim()) : [];
+        const extraRegex = process.env.CORS_ORIGIN_REGEX
+          ? new RegExp(process.env.CORS_ORIGIN_REGEX)
+          : null;
         const allowed =
           /^https?:\/\/(localhost|127\.0\.0\.1|::1)(:\d+)?$/.test(origin) ||
-          /\.ptdarrahman\.sch\.id$/.test(origin);
+          /\.ptdarrahman\.sch\.id$/.test(origin) ||
+          explicitOrigins.includes(origin) ||
+          (extraRegex ? extraRegex.test(origin) : false);
         cb(allowed ? null : new Error("Not allowed by CORS"), allowed);
       },
       methods: ["GET", "POST", "PUT", "DELETE"],

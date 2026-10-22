@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { API_BASE } from '../api/client'
+import { API_BASE, getErrorMessage } from '../api/client'
 import { ShieldCheck } from 'lucide-react'
 import { useBrand, AuthCard } from '@repo/ui'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login, user } = useAuth()
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() =>
+    // Sesi diakhiri sistem (token expired/revoke) — flag ditulis oleh client.ts /
+    // AuthContext sebelum redirect penuh. Dibaca via lazy initializer (murni,
+    // aman untuk StrictMode), bukan setState di dalam effect.
+    sessionStorage.getItem('sa_session_expired') === '1'
+      ? 'Sesi Anda berakhir atau koneksi terputus. Silakan masuk kembali.'
+      : ''
+  )
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
+
+  // Bersihkan flag sesudah pesan tampil. Ini mutasi external system (bukan
+  // setState), jadi aman dipanggil di effect.
+  useEffect(() => {
+    sessionStorage.removeItem('sa_session_expired')
+  }, [])
   // Logo diambil dinamis via hook useBrand (fetch /companyprofile/settings/logo
   // + live-update via SSE). Tidak ada aset logo statis — fallback text mark.
   const { logoUrl } = useBrand(API_BASE)
@@ -44,7 +57,7 @@ export default function LoginPage() {
       setTimeout(() => navigate('/', { replace: true }), 500)
     } catch (e: any) {
       setSuccess(false)
-      setError(e.message || 'Login gagal')
+      setError(getErrorMessage(e, 'Login gagal'))
     } finally {
       setLoading(false)
     }

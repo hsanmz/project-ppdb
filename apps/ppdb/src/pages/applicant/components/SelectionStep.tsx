@@ -1,6 +1,38 @@
 import { useState } from 'react'
-import { CalendarDays, Clock, MapPin, Star, XCircle, Download, ExternalLink, ShieldCheck, HelpCircle, Lock, CheckCircle, User, Video, CalendarPlus, Tag } from 'lucide-react'
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui'
+import {
+  CalendarDays,
+  Clock,
+  MapPin,
+  Star,
+  XCircle,
+  Download,
+  ExternalLink,
+  ShieldCheck,
+  HelpCircle,
+  Lock,
+  CheckCircle,
+  User,
+  Video,
+  CalendarPlus,
+  Tag,
+  Trophy,
+  CheckCircle2,
+  BookOpen,
+  MessageSquare,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui'
 import { useToast } from '@/components/Toast'
 
 interface SelectionStepProps {
@@ -23,16 +55,31 @@ const getGoogleCalendarUrl = (session: any, titlePrefix: string) => {
   const endTimeStr = `${endHour}${startMinute}`
 
   const dates = `${dateStr}T${startTimeStr}00/${dateStr}T${endTimeStr}00`
-  const text = encodeURIComponent(`${titlePrefix} - PPDB Pesantren Tahfidz Qur'an dan Digital Ar-Rahman`)
+  const text = encodeURIComponent(`${titlePrefix} - PPDB PTDARRAHMAN`)
   const loc = encodeURIComponent(
     session.mode === 'online'
       ? session.meeting_url || 'Online Meeting'
-      : session.location || "Pesantren Tahfidz Qur'an dan Digital Ar-Rahman"
+      : session.location || 'PTDARRAHMAN'
   )
   const details = encodeURIComponent(
-    `Jadwal ${titlePrefix} PPDB Pesantren Tahfidz Qur'an dan Digital Ar-Rahman.\nPenguji: ${session.officer_name || '-'}\nMode: ${session.mode === 'online' ? 'Online' : 'Offline'}\n${session.mode === 'online' ? `Link: ${session.meeting_url || '-'}` : `Lokasi: ${session.location || '-'}`}`
+    `Jadwal ${titlePrefix} PPDB PTDARRAHMAN.\nPenguji: ${session.officer_name || '-'}\nMode: ${session.mode === 'online' ? 'Online' : 'Offline'}\n${session.mode === 'online' ? `Link: ${session.meeting_url || '-'}` : `Lokasi: ${session.location || '-'}`}`
   )
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}&location=${loc}`
+}
+
+const parseNotes = (raw?: string | null) => {
+  if (!raw) return { tahfidz: '', wawancara: '', general: '' }
+  const text = raw.trim()
+  const tahfidzMatch = text.match(/(?:^|\n)\[Tahfidz\]:\s*([\s\S]*?)(?=(?:\n\[|$))/i)
+  const wawancaraMatch = text.match(/(?:^|\n)\[Wawancara\]:\s*([\s\S]*?)(?=(?:\n\[|$))/i)
+  if (tahfidzMatch || wawancaraMatch) {
+    return {
+      tahfidz: tahfidzMatch ? tahfidzMatch[1].trim() : '',
+      wawancara: wawancaraMatch ? wawancaraMatch[1].trim() : '',
+      general: '',
+    }
+  }
+  return { tahfidz: '', wawancara: '', general: text }
 }
 
 export default function SelectionStep({
@@ -48,12 +95,31 @@ export default function SelectionStep({
   const regPath = (applicant?.registration_path || '').toLowerCase()
   const isTiuPath = ['reguler', 'tiu', 'tes', 'reguler_tiu'].includes(regPath) || regPath.includes('tiu')
 
-  const tahfidzSession = sessionData?.tahfidz_session || null;
-  const interviewSession = sessionData?.interview_session || null;
-  const availableTahfidz = sessionData?.available_tahfidz_sessions || [];
-  const availableInterview = sessionData?.available_interview_sessions || [];
-  const hasTahfidzScore = sessionData?.has_tahfidz_score || false;
-  const hasInterviewScore = sessionData?.has_interview_score || false;
+  const tahfidzSession = sessionData?.tahfidz_session || null
+  const interviewSession = sessionData?.interview_session || null
+  const availableTahfidz = sessionData?.available_tahfidz_sessions || []
+  const availableInterview = sessionData?.available_interview_sessions || []
+  const hasTahfidzScore = sessionData?.has_tahfidz_score || false
+  const hasInterviewScore = sessionData?.has_interview_score || false
+
+  // Status kelulusan & penyelesaian tahapan
+  const isPassed = applicant?.status === 'passed'
+  const isTahfidzCompleted = Boolean(hasTahfidzScore || isPassed)
+  const isInterviewCompleted = Boolean(hasInterviewScore || isPassed)
+  const parsedNotes = parseNotes(selectionResult?.notes)
+
+  // Nilai rubrik terfilter
+  const tahfidzScores = (selectionResult?.scores || []).filter((s: any) => {
+    const cat = (s.category_name || '').toLowerCase()
+    const crit = (s.criteria_name || '').toLowerCase()
+    return cat.includes('tahfidz') || crit.includes('tahfidz') || cat.includes('quran') || cat.includes("qur'an")
+  })
+
+  const interviewScores = (selectionResult?.scores || []).filter((s: any) => {
+    const cat = (s.category_name || '').toLowerCase()
+    const crit = (s.criteria_name || '').toLowerCase()
+    return cat.includes('wawancara') || cat.includes('interview') || crit.includes('wawancara') || crit.includes('interview')
+  })
 
   // Cek apakah sesi yang sudah diambil telah lewat lebih dari 1 hari (H+1)
   const [now] = useState(() => Date.now())
@@ -72,7 +138,7 @@ export default function SelectionStep({
   const tiuScore = selectionResult?.scores?.find((s: any) =>
     (s.criteria_name || '').toLowerCase().includes('tiu') ||
     (s.category_name || '').toLowerCase().includes('tiu')
-  )?.score;
+  )?.score
 
   const showTiu = (section === 'all' || section === 'tiu') && isTiuPath
   const showTahfidz = section === 'all' || section === 'tahfidz'
@@ -102,6 +168,9 @@ export default function SelectionStep({
 
   return (
     <div className="space-y-4">
+      {/* ─────────────────────────────────────────────────────────────
+          1. SECTION UJIAN TIU ONLINE (SAFE EXAM BROWSER)
+         ───────────────────────────────────────────────────────────── */}
       {showTiu && (
         <>
           <Card className="border-indigo-200 bg-indigo-50/50 shadow-sm">
@@ -135,6 +204,14 @@ export default function SelectionStep({
                   <div className="text-left sm:text-right self-start sm:self-center shrink-0">
                     <span className="text-[10px] font-semibold text-emerald-700 uppercase block">Nilai TIU</span>
                     <Badge variant="success" className="text-base font-bold px-3 py-0.5 mt-0.5">{tiuScore}</Badge>
+                  </div>
+                </div>
+              ) : isPassed ? (
+                <div className="p-3.5 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-emerald-900">Ujian TIU Telah Terpenuhi</p>
+                    <p className="text-xs text-emerald-700">Persyaratan akademik TIU telah dinyatakan lulus dalam proses seleksi.</p>
                   </div>
                 </div>
               ) : (
@@ -208,7 +285,7 @@ export default function SelectionStep({
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-md text-amber-800">
-                  Jika masalah berlanjut dan Anda tidak bisa mengakses ujian sama sekali, segera hubungi Panitia PPDB Ar-Rahman melalui nomor kontak resmi yang tersedia.
+                  Jika masalah berlanjut dan Anda tidak bisa mengakses ujian sama sekali, segera hubungi Panitia PPDB PTDARRAHMAN melalui nomor kontak resmi yang tersedia.
                 </div>
               </div>
             </DialogContent>
@@ -216,22 +293,147 @@ export default function SelectionStep({
         </>
       )}
 
-      {/* Bagian Jadwal Tahfidz */}
+      {/* ─────────────────────────────────────────────────────────────
+          2. SECTION SELEKSI TAHFIDZ (1:1)
+         ───────────────────────────────────────────────────────────── */}
       {showTahfidz && (
         <>
-          {tahfidzSession && isTahfidzPastGrace ? (
-            !hasTahfidzScore ? (
-              <Card className="border-slate-200 bg-slate-50/70 shadow-sm">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <Clock className="w-5 h-5 text-slate-500 shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">Sesi Seleksi Tahfidz Telah Dilaksanakan</p>
-                    <p className="text-[11px] text-muted-foreground">Jadwal seleksi telah terlewat. Saat ini sedang menunggu penginputan hasil evaluasi nilai dari penguji.</p>
+          {isTahfidzCompleted ? (
+            /* Completed Sheet: Sesi Tahfidz telah dinilai atau santri telah lulus */
+            <Card className="border-emerald-200 bg-emerald-50/40 shadow-sm">
+              <CardContent className="p-4 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-base">Ujian Seleksi Tahfidz Telah Selesai</h4>
+                      <p className="text-xs text-slate-600 mt-0.5">Ujian hafalan dan tartil Al-Qur'an telah dilaksanakan dan dinilai resmi oleh penguji.</p>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            ) : null
+                  <Badge variant="success" className="text-xs px-3 py-1 font-semibold shrink-0">
+                    {isPassed ? 'Lulus Seleksi' : 'Selesai Dinilai'}
+                  </Badge>
+                </div>
+
+                {/* Rincian Sesi yang Telah Diikuti */}
+                {tahfidzSession ? (
+                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-emerald-100 space-y-3">
+                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <CalendarDays className="w-3.5 h-3.5 text-emerald-600" />
+                      Rincian Sesi yang Diikuti
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Nama Sesi:</span>
+                        <span className="font-semibold text-slate-800">{tahfidzSession.name}</span>
+                      </div>
+                      {tahfidzSession.session_date && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Tanggal:</span>
+                          <span className="font-semibold text-slate-800">
+                            {new Date(tahfidzSession.session_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </div>
+                      )}
+                      {tahfidzSession.start_time && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Waktu:</span>
+                          <span className="font-semibold text-slate-800">{tahfidzSession.start_time} WIB</span>
+                        </div>
+                      )}
+                      {tahfidzSession.officer_name && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Penguji Tahfidz:</span>
+                          <span className="font-semibold text-slate-800 flex items-center gap-1">
+                            <User className="w-3 h-3 text-primary" /> {tahfidzSession.officer_name}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Mode Pelaksanaan:</span>
+                        <span className="font-semibold text-slate-800">
+                          {tahfidzSession.mode === 'online' ? 'Online (Tatap Maya)' : 'Offline (Tatap Muka)'}
+                        </span>
+                      </div>
+                      {applicant?.wave_name && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Gelombang:</span>
+                          <span className="font-semibold text-slate-800">{applicant.wave_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-emerald-100 flex items-center gap-3 text-xs text-slate-700">
+                    <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Ujian Tahfidz telah diverifikasi langsung oleh Tim Panitia Penerimaan Santri Baru.</span>
+                  </div>
+                )}
+
+                {/* Rekap Nilai Rubrik Tahfidz */}
+                {tahfidzScores.length > 0 && (
+                  <div className="space-y-2">
+                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 text-amber-500" />
+                      Nilai Penilaian Rubrik Tahfidz
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {tahfidzScores.map((sc: any, idx: number) => (
+                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-3 flex justify-between items-center shadow-2xs">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] text-muted-foreground truncate">{sc.category_name}</p>
+                            <p className="text-sm font-medium text-slate-800">{sc.criteria_name}</p>
+                          </div>
+                          <Badge variant="outline" className="text-base font-bold bg-emerald-50 text-emerald-800 border-emerald-200 px-2.5 py-0.5">
+                            {sc.score}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Catatan Evaluator Tahfidz */}
+                {(parsedNotes.tahfidz || (parsedNotes.general && !isInterviewCompleted)) && (
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      Catatan Evaluator Tahfidz:
+                    </span>
+                    <p className="italic leading-relaxed">{parsedNotes.tahfidz || parsedNotes.general}</p>
+                  </div>
+                )}
+
+                {/* Tombol Lanjut ke Wawancara (jika seleksi belum publish LoA) */}
+                {!isPassed && (
+                  <div className="pt-2 flex justify-end">
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 text-white font-semibold gap-1.5 h-9"
+                      onClick={() => { window.location.href = '/applicant/seleksi-wawancara' }}
+                    >
+                      <span>Lanjut ke Sesi Wawancara</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : tahfidzSession && isTahfidzPastGrace ? (
+            /* Sesi telah terlewat dan sedang menunggu penginputan nilai dari penguji */
+            <Card className="border-slate-200 bg-slate-50/70 shadow-sm">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Clock className="w-5 h-5 text-slate-500 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Sesi Seleksi Tahfidz Telah Dilaksanakan</p>
+                  <p className="text-[11px] text-muted-foreground">Jadwal seleksi telah terlewat. Saat ini sedang menunggu penginputan hasil evaluasi nilai dari penguji.</p>
+                </div>
+              </CardContent>
+            </Card>
           ) : tahfidzSession ? (
+            /* Sesi aktif terdaftar yang akan datang */
             <Card className="border-blue-200 bg-blue-50/50 shadow-sm">
               <CardContent className="p-4 sm:p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -331,6 +533,7 @@ export default function SelectionStep({
               </CardContent>
             </Card>
           ) : ['document_approved', 'selection'].includes(applicant?.status) && isTiuPath && tiuScore === undefined ? (
+            /* Terkunci karena pendaftar jalur TIU belum selesai tes TIU */
             <Card className="border-slate-200 bg-slate-50/70 shadow-sm">
               <CardContent className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
                 <div className="h-10 w-10 shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">
@@ -346,7 +549,8 @@ export default function SelectionStep({
                 </div>
               </CardContent>
             </Card>
-          ) : ['document_approved', 'selection'].includes(applicant?.status) && (
+          ) : ['document_approved', 'selection'].includes(applicant?.status) ? (
+            /* Menampilkan daftar slot sesi 1:1 Tahfidz yang tersedia untuk dipilih */
             <Card className="shadow-sm border-slate-200">
               <CardContent className="p-4 sm:p-5 space-y-4">
                 <div>
@@ -364,7 +568,7 @@ export default function SelectionStep({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {availableTahfidz.map((s: any) => {
-                      const isFull = s.quota > 0 && s.booked_count >= s.quota;
+                      const isFull = s.quota > 0 && s.booked_count >= s.quota
                       return (
                         <div key={s.id} className={`border rounded-xl p-3.5 sm:p-4 transition-all ${isFull ? 'bg-slate-50 opacity-60 border-slate-200' : 'bg-white hover:border-emerald-300 hover:shadow-md'}`}>
                           <div className="flex justify-between items-start mb-2 gap-2">
@@ -377,7 +581,7 @@ export default function SelectionStep({
                                 </Badge>
                               )}
                             </div>
-                            <Badge variant={isFull ? "destructive" : "secondary"} className="text-[10px] shrink-0 font-medium">
+                            <Badge variant={isFull ? 'destructive' : 'secondary'} className="text-[10px] shrink-0 font-medium">
                               {isFull ? 'Slot Penuh' : 'Slot 1:1 Tersedia'}
                             </Badge>
                           </div>
@@ -409,7 +613,7 @@ export default function SelectionStep({
                           <Button
                             size="sm"
                             className="w-full h-10 font-semibold"
-                            variant={isFull ? "secondary" : "default"}
+                            variant={isFull ? 'secondary' : 'default'}
                             disabled={isFull || booking}
                             onClick={() => onBookSession(s.id)}
                           >
@@ -422,221 +626,397 @@ export default function SelectionStep({
                 )}
               </CardContent>
             </Card>
+          ) : (
+            /* Fallback sebelum dokumen diverifikasi */
+            <Card className="border-slate-200 bg-slate-50/70 shadow-sm">
+              <CardContent className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                    Tahap Seleksi Belum Terbuka
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Dokumen persyaratan pendaftaran Anda saat ini masih dalam proses peninjauan dan verifikasi oleh panitia PPDB. Jadwal sesi 1:1 Tahfidz akan terbuka secara otomatis setelah berkas Anda disetujui.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </>
       )}
 
-      {/* Bagian Jadwal Wawancara */}
+      {/* ─────────────────────────────────────────────────────────────
+          3. SECTION SELEKSI WAWANCARA (1:1)
+         ───────────────────────────────────────────────────────────── */}
       {showInterview && (
         <>
-          {interviewSession && isInterviewPastGrace ? (
-        !hasInterviewScore ? (
-          <Card className="border-slate-200 bg-slate-50/70 shadow-sm mt-4">
-            <CardContent className="p-4 flex items-center gap-3">
-              <Clock className="w-5 h-5 text-slate-500 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-slate-800">Sesi Wawancara Telah Dilaksanakan</p>
-                <p className="text-[11px] text-muted-foreground">Jadwal seleksi telah terlewat. Saat ini sedang menunggu penginputan nilai dan rekapitulasi keputusan panitia.</p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null
-      ) : interviewSession ? (
-        <Card className="border-blue-200 bg-blue-50/50 shadow-sm mt-4">
-          <CardContent className="p-4 sm:p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-semibold text-blue-900 flex items-center gap-2 text-sm">
-                <CalendarDays className="h-5 w-5 text-blue-600 shrink-0" />
-                <span>Jadwal Seleksi Wawancara (Session 1:1)</span>
-              </h4>
-              {applicant?.wave_name && (
-                <Badge variant="outline" className="text-[10px] bg-white text-blue-800 border-blue-200 inline-flex items-center gap-1 font-medium">
-                  <Tag className="h-2.5 w-2.5 shrink-0" />
-                  <span>{applicant.wave_name}</span>
-                </Badge>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm bg-white/60 p-3.5 sm:p-4 rounded-xl border border-blue-100">
-              <div>
-                <div className="text-muted-foreground text-xs mb-1">Nama Session</div>
-                <div className="font-medium text-slate-900 break-words">{interviewSession.name}</div>
-              </div>
-              {interviewSession.session_date && (
-                <div>
-                   <div className="text-muted-foreground text-xs mb-1">Tanggal</div>
-                   <div className="font-medium text-slate-900">
-                     {new Date(interviewSession.session_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                   </div>
-                </div>
-              )}
-              {interviewSession.start_time && (
-                <div>
-                  <div className="text-muted-foreground text-xs mb-1">Waktu Pelaksanaan</div>
-                  <div className="font-medium text-slate-900">
-                    {interviewSession.start_time} – Selesai WIB
+          {isInterviewCompleted ? (
+            /* Completed Sheet: Sesi Wawancara telah dinilai atau santri telah lulus */
+            <Card className="border-emerald-200 bg-emerald-50/40 shadow-sm mt-4">
+              <CardContent className="p-4 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-base">Wawancara Calon Santri & Wali Selesai</h4>
+                      <p className="text-xs text-slate-600 mt-0.5">Sesi wawancara kesiapan mondok dan komitmen orang tua/wali telah dinilai resmi oleh pewawancara.</p>
+                    </div>
                   </div>
+                  <Badge variant="success" className="text-xs px-3 py-1 font-semibold shrink-0">
+                    {isPassed ? 'Lulus Seleksi' : 'Selesai Dinilai'}
+                  </Badge>
                 </div>
-              )}
-              {interviewSession.officer_name && (
-                <div>
-                  <div className="text-muted-foreground text-xs mb-1">Pewawancara</div>
-                  <div className="font-medium text-slate-900 flex items-center gap-1.5">
-                    <User className="h-4 w-4 text-primary shrink-0" />
-                    <span className="break-words">{interviewSession.officer_name}</span>
+
+                {/* Rincian Sesi Wawancara */}
+                {interviewSession ? (
+                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-emerald-100 space-y-3">
+                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <CalendarDays className="w-3.5 h-3.5 text-emerald-600" />
+                      Rincian Sesi yang Diikuti
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Nama Sesi:</span>
+                        <span className="font-semibold text-slate-800">{interviewSession.name}</span>
+                      </div>
+                      {interviewSession.session_date && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Tanggal:</span>
+                          <span className="font-semibold text-slate-800">
+                            {new Date(interviewSession.session_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </div>
+                      )}
+                      {interviewSession.start_time && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Waktu:</span>
+                          <span className="font-semibold text-slate-800">{interviewSession.start_time} WIB</span>
+                        </div>
+                      )}
+                      {interviewSession.officer_name && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Pewawancara:</span>
+                          <span className="font-semibold text-slate-800 flex items-center gap-1">
+                            <User className="w-3 h-3 text-primary" /> {interviewSession.officer_name}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Mode Pelaksanaan:</span>
+                        <span className="font-semibold text-slate-800">
+                          {interviewSession.mode === 'online' ? 'Online (Tatap Maya)' : 'Offline (Tatap Muka)'}
+                        </span>
+                      </div>
+                      {applicant?.wave_name && (
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Gelombang:</span>
+                          <span className="font-semibold text-slate-800">{applicant.wave_name}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                ) : (
+                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-emerald-100 flex items-center gap-3 text-xs text-slate-700">
+                    <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Wawancara telah diverifikasi langsung oleh Tim Panitia Penerimaan Santri Baru.</span>
+                  </div>
+                )}
+
+                {/* Rekap Nilai Rubrik Wawancara */}
+                {interviewScores.length > 0 && (
+                  <div className="space-y-2">
+                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 text-amber-500" />
+                      Nilai Penilaian Rubrik Wawancara
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {interviewScores.map((sc: any, idx: number) => (
+                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-3 flex justify-between items-center shadow-2xs">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] text-muted-foreground truncate">{sc.category_name}</p>
+                            <p className="text-sm font-medium text-slate-800">{sc.criteria_name}</p>
+                          </div>
+                          <Badge variant="outline" className="text-base font-bold bg-emerald-50 text-emerald-800 border-emerald-200 px-2.5 py-0.5">
+                            {sc.score}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Catatan Pewawancara */}
+                {(parsedNotes.wawancara || (parsedNotes.general && isInterviewCompleted)) && (
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      Catatan Pewawancara:
+                    </span>
+                    <p className="italic leading-relaxed">{parsedNotes.wawancara || parsedNotes.general}</p>
+                  </div>
+                )}
+
+                {/* Celebration Box & CTA ke LoA jika santri Lulus */}
+                {isPassed ? (
+                  <div className="p-4 bg-emerald-100/60 border border-emerald-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <h5 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
+                        <Trophy className="w-4 h-4 text-emerald-700" />
+                        Selamat! Anda Dinyatakan Lulus Seleksi
+                      </h5>
+                      <p className="text-xs text-emerald-800">
+                        Surat Penerimaan Resmi (LoA) Anda telah terbit. Silakan buka menu pengumuman untuk menandatangani dokumen LoA.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold gap-2 shrink-0 h-10 px-4 shadow-sm"
+                      onClick={() => { window.location.href = '/applicant/pengumuman' }}
+                    >
+                      <span>Lihat Pengumuman & LoA</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+                    Seluruh sesi seleksi telah selesai dijalani. Panitia sedang menyusun rekapitulasi penilaian akhir untuk pengumuman kelulusan resmi.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : interviewSession && isInterviewPastGrace ? (
+            /* Sesi wawancara telah lewat, menunggu nilai */
+            <Card className="border-slate-200 bg-slate-50/70 shadow-sm mt-4">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Clock className="w-5 h-5 text-slate-500 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Sesi Wawancara Telah Dilaksanakan</p>
+                  <p className="text-[11px] text-muted-foreground">Jadwal seleksi telah terlewat. Saat ini sedang menunggu penginputan nilai dan rekapitulasi keputusan panitia.</p>
                 </div>
-              )}
-              <div>
-                <div className="text-muted-foreground text-xs mb-1">Mode Pelaksanaan</div>
-                <div className="font-medium flex items-center gap-1.5">
-                  {interviewSession.mode === 'online' ? (
-                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 gap-1 text-xs">
-                      <Video className="h-3.5 w-3.5" /> Online (Tatap Maya)
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 gap-1 text-xs">
-                      <MapPin className="h-3.5 w-3.5" /> Offline (Tatap Muka)
+              </CardContent>
+            </Card>
+          ) : interviewSession ? (
+            /* Sesi aktif wawancara terdaftar */
+            <Card className="border-blue-200 bg-blue-50/50 shadow-sm mt-4">
+              <CardContent className="p-4 sm:p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-semibold text-blue-900 flex items-center gap-2 text-sm">
+                    <CalendarDays className="h-5 w-5 text-blue-600 shrink-0" />
+                    <span>Jadwal Seleksi Wawancara (Session 1:1)</span>
+                  </h4>
+                  {applicant?.wave_name && (
+                    <Badge variant="outline" className="text-[10px] bg-white text-blue-800 border-blue-200 inline-flex items-center gap-1 font-medium">
+                      <Tag className="h-2.5 w-2.5 shrink-0" />
+                      <span>{applicant.wave_name}</span>
                     </Badge>
                   )}
                 </div>
-              </div>
-              {interviewSession.mode === 'online' && interviewSession.meeting_url && (
-                <div className="sm:col-span-2 min-w-0">
-                  <div className="text-muted-foreground text-xs mb-1">Tautan / Link Zoom / Meet</div>
-                  <a
-                    href={interviewSession.meeting_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline font-semibold inline-flex items-center gap-1.5 text-xs bg-white px-3 py-2 rounded-md border border-blue-200 break-all max-w-full"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    <span className="break-all">{interviewSession.meeting_url}</span>
-                  </a>
-                </div>
-              )}
-              {interviewSession.mode !== 'online' && interviewSession.location && (
-                <div className="sm:col-span-2">
-                  <div className="text-muted-foreground text-xs mb-1">Lokasi Ruangan / Gedung</div>
-                  <div className="font-medium text-slate-900 flex items-center gap-1.5">
-                    <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="break-words">{interviewSession.location}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm bg-white/60 p-3.5 sm:p-4 rounded-xl border border-blue-100">
+                  <div>
+                    <div className="text-muted-foreground text-xs mb-1">Nama Session</div>
+                    <div className="font-medium text-slate-900 break-words">{interviewSession.name}</div>
                   </div>
-                </div>
-              )}
-            </div>
-            <div className="pt-2 flex">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto h-10 gap-2 border-blue-300 bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
-                onClick={() => {
-                  const url = getGoogleCalendarUrl(interviewSession, 'Wawancara Seleksi')
-                  window.open(url, '_blank')
-                }}
-              >
-                <CalendarPlus className="h-4 w-4" />
-                Google Calendar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : ['document_approved', 'selection'].includes(applicant?.status) && hasTahfidzScore ? (
-        <Card className="shadow-sm border-slate-200 mt-4">
-          <CardContent className="p-4 sm:p-5 space-y-4">
-            <div>
-              <h4 className="font-semibold text-slate-900 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-emerald-600 shrink-0" />
-                <span>Pilih Jadwal Wawancara (Session 1:1)</span>
-              </h4>
-              <p className="text-sm text-muted-foreground mt-1">Nilai Tahfidz Anda sudah keluar. Silakan pilih jadwal session 1:1 Wawancara.</p>
-            </div>
-
-            {availableInterview.length === 0 ? (
-              <div className="p-4 bg-muted/20 border border-slate-100 text-center rounded-lg">
-                <p className="text-sm text-muted-foreground">Belum ada jadwal session Wawancara yang dibuka oleh panitia.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {availableInterview.map((s: any) => {
-                  const isFull = s.quota > 0 && s.booked_count >= s.quota;
-                  return (
-                    <div key={s.id} className={`border rounded-xl p-3.5 sm:p-4 transition-all ${isFull ? 'bg-slate-50 opacity-60 border-slate-200' : 'bg-white hover:border-emerald-300 hover:shadow-md'}`}>
-                      <div className="flex justify-between items-start mb-2 gap-2">
-                        <div className="min-w-0 flex-1">
-                          <h5 className="font-bold text-sm text-slate-900 truncate">{s.name}</h5>
-                          {s.wave_name && (
-                            <Badge variant="outline" className="text-[9px] py-0 px-1.5 bg-blue-50 text-blue-700 border-blue-200 font-medium mt-0.5 inline-flex items-center gap-1">
-                              <Tag className="h-2.5 w-2.5 shrink-0" />
-                              <span>{s.wave_name}</span>
-                            </Badge>
-                          )}
-                        </div>
-                        <Badge variant={isFull ? "destructive" : "secondary"} className="text-[10px] shrink-0 font-medium">
-                          {isFull ? 'Sudah Diambil' : 'Slot 1:1 Tersedia'}
+                  {interviewSession.session_date && (
+                    <div>
+                      <div className="text-muted-foreground text-xs mb-1">Tanggal</div>
+                      <div className="font-medium text-slate-900">
+                        {new Date(interviewSession.session_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </div>
+                    </div>
+                  )}
+                  {interviewSession.start_time && (
+                    <div>
+                      <div className="text-muted-foreground text-xs mb-1">Waktu Pelaksanaan</div>
+                      <div className="font-medium text-slate-900">
+                        {interviewSession.start_time} – Selesai WIB
+                      </div>
+                    </div>
+                  )}
+                  {interviewSession.officer_name && (
+                    <div>
+                      <div className="text-muted-foreground text-xs mb-1">Pewawancara</div>
+                      <div className="font-medium text-slate-900 flex items-center gap-1.5">
+                        <User className="h-4 w-4 text-primary shrink-0" />
+                        <span className="break-words">{interviewSession.officer_name}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-muted-foreground text-xs mb-1">Mode Pelaksanaan</div>
+                    <div className="font-medium flex items-center gap-1.5">
+                      {interviewSession.mode === 'online' ? (
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-200 gap-1 text-xs">
+                          <Video className="h-3.5 w-3.5" /> Online (Tatap Maya)
                         </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground space-y-1.5 mb-4">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span className="break-words">{s.session_date ? new Date(s.session_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }) : '-'}, {s.start_time || '-'} – Selesai WIB</span>
-                        </div>
-                        {s.officer_name && (
-                          <div className="flex items-center gap-2">
-                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="font-medium text-slate-700 break-words">Pewawancara: {s.officer_name}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          {s.mode === 'online' ? (
-                            <>
-                              <Video className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                              <span className="text-blue-700 font-medium">Online (Tatap Maya)</span>
-                            </>
-                          ) : (
-                            <>
-                              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span className="line-clamp-1">{s.location || 'Offline (Tatap Muka)'}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        className="w-full h-10 font-semibold"
-                        variant={isFull ? "secondary" : "default"}
-                        disabled={isFull || booking}
-                        onClick={() => onBookSession(s.id)}
+                      ) : (
+                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 gap-1 text-xs">
+                          <MapPin className="h-3.5 w-3.5" /> Offline (Tatap Muka)
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {interviewSession.mode === 'online' && interviewSession.meeting_url && (
+                    <div className="sm:col-span-2 min-w-0">
+                      <div className="text-muted-foreground text-xs mb-1">Tautan / Link Zoom / Meet</div>
+                      <a
+                        href={interviewSession.meeting_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline font-semibold inline-flex items-center gap-1.5 text-xs bg-white px-3 py-2 rounded-md border border-blue-200 break-all max-w-full"
                       >
-                        {isFull ? 'Slot Penuh' : 'Pilih Jadwal'}
-                      </Button>
-                     </div>
-                   )
-                 })}
-               </div>
-             )}
-           </CardContent>
-         </Card>
-       ) : ['document_approved', 'selection'].includes(applicant?.status) && !interviewSession ? (
-         <Card className="border-slate-200 bg-slate-50/70 shadow-sm mt-4">
-           <CardContent className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
-             <div className="h-10 w-10 shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">
-               <Lock className="w-5 h-5" />
-             </div>
-             <div className="min-w-0 flex-1">
-               <h4 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-                 Sesi Wawancara (Terkunci)
-               </h4>
-               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                 Sesi Wawancara baru dapat dipilih setelah penguji selesai menguji dan menginput nilai Ujian Tahfidz Anda ke dalam sistem.
-               </p>
-             </div>
-           </CardContent>
-         </Card>
-       ) : null}
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        <span className="break-all">{interviewSession.meeting_url}</span>
+                      </a>
+                    </div>
+                  )}
+                  {interviewSession.mode !== 'online' && interviewSession.location && (
+                    <div className="sm:col-span-2">
+                      <div className="text-muted-foreground text-xs mb-1">Lokasi Ruangan / Gedung</div>
+                      <div className="font-medium text-slate-900 flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="break-words">{interviewSession.location}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 flex">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto h-10 gap-2 border-blue-300 bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                    onClick={() => {
+                      const url = getGoogleCalendarUrl(interviewSession, 'Wawancara Seleksi')
+                      window.open(url, '_blank')
+                    }}
+                  >
+                    <CalendarPlus className="h-4 w-4" />
+                    Google Calendar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : ['document_approved', 'selection'].includes(applicant?.status) && hasTahfidzScore ? (
+            /* Menampilkan slot wawancara jika nilai tahfidz sudah keluar */
+            <Card className="shadow-sm border-slate-200 mt-4">
+              <CardContent className="p-4 sm:p-5 space-y-4">
+                <div>
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <CalendarDays className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <span>Pilih Jadwal Wawancara (Session 1:1)</span>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mt-1">Nilai Tahfidz Anda sudah keluar. Silakan pilih jadwal session 1:1 Wawancara.</p>
+                </div>
+
+                {availableInterview.length === 0 ? (
+                  <div className="p-4 bg-muted/20 border border-slate-100 text-center rounded-lg">
+                    <p className="text-sm text-muted-foreground">Belum ada jadwal session Wawancara yang dibuka oleh panitia.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {availableInterview.map((s: any) => {
+                      const isFull = s.quota > 0 && s.booked_count >= s.quota
+                      return (
+                        <div key={s.id} className={`border rounded-xl p-3.5 sm:p-4 transition-all ${isFull ? 'bg-slate-50 opacity-60 border-slate-200' : 'bg-white hover:border-emerald-300 hover:shadow-md'}`}>
+                          <div className="flex justify-between items-start mb-2 gap-2">
+                            <div className="min-w-0 flex-1">
+                              <h5 className="font-bold text-sm text-slate-900 truncate">{s.name}</h5>
+                              {s.wave_name && (
+                                <Badge variant="outline" className="text-[9px] py-0 px-1.5 bg-blue-50 text-blue-700 border-blue-200 font-medium mt-0.5 inline-flex items-center gap-1">
+                                  <Tag className="h-2.5 w-2.5 shrink-0" />
+                                  <span>{s.wave_name}</span>
+                                </Badge>
+                              )}
+                            </div>
+                            <Badge variant={isFull ? 'destructive' : 'secondary'} className="text-[10px] shrink-0 font-medium">
+                              {isFull ? 'Sudah Diambil' : 'Slot 1:1 Tersedia'}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1.5 mb-4">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span className="break-words">{s.session_date ? new Date(s.session_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }) : '-'}, {s.start_time || '-'} – Selesai WIB</span>
+                            </div>
+                            {s.officer_name && (
+                              <div className="flex items-center gap-2">
+                                <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700 break-words">Pewawancara: {s.officer_name}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              {s.mode === 'online' ? (
+                                <>
+                                  <Video className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                  <span className="text-blue-700 font-medium">Online (Tatap Maya)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                  <span className="line-clamp-1">{s.location || 'Offline (Tatap Muka)'}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full h-10 font-semibold"
+                            variant={isFull ? 'secondary' : 'default'}
+                            disabled={isFull || booking}
+                            onClick={() => onBookSession(s.id)}
+                          >
+                            {isFull ? 'Slot Penuh' : 'Pilih Jadwal'}
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : ['document_approved', 'selection'].includes(applicant?.status) && !interviewSession ? (
+            /* Terkunci karena nilai tahfidz belum diinput penguji */
+            <Card className="border-slate-200 bg-slate-50/70 shadow-sm mt-4">
+              <CardContent className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                    Sesi Wawancara (Terkunci)
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Sesi Wawancara baru dapat dipilih setelah penguji selesai menguji dan menginput nilai Ujian Tahfidz Anda ke dalam sistem.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Fallback sebelum dokumen diverifikasi */
+            <Card className="border-slate-200 bg-slate-50/70 shadow-sm mt-4">
+              <CardContent className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                    Tahap Seleksi Belum Terbuka
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Dokumen pendaftaran Anda saat ini masih dalam proses peninjauan dan verifikasi oleh panitia PPDB. Jadwal sesi 1:1 Wawancara akan terbuka secara otomatis setelah berkas Anda disetujui.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
-      {/* Jika sudah ada penilaian tapi belum di-publish final (status masih selection) */}
+      {/* ─────────────────────────────────────────────────────────────
+          4. NILAI UJIAN SEMENTARA (Hanya jika masih dalam seleksi aktif)
+         ───────────────────────────────────────────────────────────── */}
       {showScores && !['passed', 'failed'].includes(applicant?.status) && selectionResult && selectionResult.scores && selectionResult.scores.length > 0 && (
         <Card className="border-blue-200 bg-blue-50/30 shadow-sm mt-4">
           <CardContent className="p-4 sm:p-5">
@@ -662,6 +1042,9 @@ export default function SelectionStep({
         </Card>
       )}
 
+      {/* ─────────────────────────────────────────────────────────────
+          5. STATUS TIDAK LULUS (JIKA APPLICANT STATUS === FAILED)
+         ───────────────────────────────────────────────────────────── */}
       {applicant?.status === 'failed' && (
         <Card className="border-red-200 bg-red-50/80 shadow-sm mt-4">
           <CardContent className="p-4 sm:p-6 text-center">

@@ -41,6 +41,7 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 - `/applicant/pengumuman` (`ResultStagePage`): Pengumuman kelulusan, preview LoA resmi, dan tanda tangan digital orang tua.
 - `/applicant/bayar-dp` (`DpStagePage`): Pembayaran DP (Down Payment) biaya masuk melalui Pakasir v2 QRIS dinamis.
 - `/applicant/pembayaran-tahap2` (`Stage2PaymentPage`): Pengaturan opsi cicilan biaya masuk, pembayaran cicilan, dan penerbitan Surat Keterangan Diterima (SKD) serta link WhatsApp Group resmi santri.
+- `/applicant/profile` (`ApplicantProfilePage`): Profil mandiri calon santri (tinjau/edit formulir pendaftaran, kuesioner kesehatan, ganti password, avatar editor, dan manajemen sesi login perangkat aktif).
 - `/applicant/kartu-ujian` (`ExamCardPage`): Unduh kartu ujian/identitas pendaftar.
 
 ### 3. Admin Protected Routes (`role="admin"`, wrapped in `AdminLayout`)
@@ -48,7 +49,9 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 - `/admin/data-pendaftar` (`DataPendaftarPage`): Ringkasan dan tabel pendaftar aktif.
 - `/admin/verifikasi-dokumen` (`VerifikasiDokumenPage`): Pemeriksaan berkas pendaftar dan kuesioner kesehatan.
 - `/admin/pembayaran-formulir` (`PembayaranFormulirPage`): Monitoring invoice formulir dan integrasi Pakasir.
-- `/admin/pembayaran-tahap2` (`PembayaranTahap2Page`): Monitoring pembayaran DP dan tagihan cicilan tahap 2.
+- `/admin/pembayaran-tahap2` (`PembayaranTahap2Page`): Monitoring pembayaran DP dan tagihan cicilan tahap 2 seluruh pendaftar.
+- `/admin/pembayaran-tahap2/:applicantId` (`PembayaranTahap2DetailPage`): Monitoring rincian buku besar tagihan, skema cicilan, pembayaran DP, dan riwayat kuitansi per individu santri.
+- `/admin/pembayaran-tahap2/:applicantId/kuitansi/:id` & `/admin/kuitansi/:id` (`AdminReceiptPage`): Rincian kuitansi resmi pembayaran dan cetak kuitansi sisi admin.
 - `/admin/sessions/tahfidz` (`Sessions1on1Page`): Manajemen jadwal & penguji sesi 1:1 Tahfidz.
 - `/admin/sessions/wawancara` (`Sessions1on1Page`, `forcedType="interview"`): Manajemen jadwal & pewawancara sesi 1:1 Wawancara.
 - `/admin/sessions/:sessionType/evaluasi/:sessionId` (`SessionEvaluationPage`): Form penilaian rubrik evaluator.
@@ -60,7 +63,7 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 - `/admin/notifications` (`NotificationsPage`): Riwayat dan template notifikasi WhatsApp.
 - `/admin/selection` & `/admin/rubrik` (`SelectionPage`): Konfigurasi bobot rubrik penilaian.
 - `/admin/arsip` (`ArsipPendaftarPage`): Pencarian arsip dossier lengkap lintas periode/gelombang dan ekspor ZIP.
-- `/admin/profile` (`AdminProfilePage`): Pengaturan profil admin.
+- `/admin/profile` (`AdminProfilePage`): Pengaturan profil admin, ganti password, avatar editor, dan manajemen sesi login.
 
 ### 4. Error Pages
 - `/403` (`ForbiddenPage`): Akses ditolak.
@@ -68,12 +71,25 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 
 ---
 
-## 💡 Komponen Modal & Fitur Spesial (`src/pages/applicant/components/`)
-- **`OfficialReceiptModal`**: Modal dialog detail kuitansi resmi lengkap dengan stempel digital dan verifikasi QR link.
+## 💡 Komponen Modal, Dokumen & Fitur Spesial
+- **`OfficialReceiptModal` & `OfficialReceiptCard`**: Modal dan kartu kuitansi resmi lengkap dengan stempel digital dan verifikasi QR HMAC token.
 - **`QrisPaymentModal`**: Dialog QRIS dinamis Pakasir v2 dengan timer kedaluwarsa, panduan bayar, dan pengecekan status otomatis.
-- **`ApplicantLoAModal`**: Modal tampilan Surat Penerimaan Resmi (LoA) dengan klausul non-refundable dan kanvas tanda tangan.
+- **`ApplicantLoAModal` & `LoaOfficialDocument`**: Tampilan Surat Penerimaan Resmi (LoA) dengan klausul non-refundable, QR verifikasi, dan kanvas tanda tangan digital orang tua.
 - **`ApplicantSKDModal`**: Modal Surat Keterangan Diterima (SKD) dengan nomor registrasi unik resmi.
+- **`ApplicantFormDocument`**: Dokumen formulir pendaftaran santri baku A4 lengkap dengan identifikasi kesehatan.
+- **`OfficialAssessmentSheet`**: Lembar penilaian evaluator ujian Tahfidz dan Wawancara berbobot resmi.
+- **`DeviceSessionsCard` & `AvatarEditor`**: Manajemen sesi login perangkat aktif dan editor foto profil (crop & zoom).
 - **`LoaResultStep` & `DpCertificateStep`**: Komponen tahapan kelulusan dan pembayaran DP.
+
+---
+
+## 🖨️ Pipeline Ekspor & Dokumen Cetak Resmi (`src/utils/`)
+- **`exportApplicantForm.ts`**: Ekspor cetak formulir pendaftaran calon santri baru format baku A4.
+- **`exportAssessment.ts`**: Ekspor cetak lembar penilaian seleksi evaluator (skor TIU, Tahfidz, Wawancara).
+- **`exportLoa.ts`**: Ekspor cetak Surat Penerimaan Resmi (LoA) pendaftar berstempel & bertanda tangan.
+- **`exportReceipt.ts`**: Ekspor cetak tanda terima kuitansi resmi pembayaran ber-HMAC QR.
+- **`exportSkd.ts`**: Ekspor cetak Surat Keterangan Diterima (SKD) pasca-pelunasan DP.
+- **`exportDocUtils.ts`**: Utilitas printing engine (iframe printing, layout envelope styling, font injection).
 
 ---
 
@@ -96,7 +112,9 @@ Aplikasi frontend Penerimaan Peserta Didik Baru (PPDB) untuk Pesantren Tahfidz Q
 
 ---
 
-## 🎨 Dynamic Branding & Loading
+## 🎨 Dynamic Branding & Design System
+- **Panduan Desain UI/UX:** Rujuk ke [**DESIGN.md**](../../DESIGN.md) untuk pedoman warna (Warm Ivory `#F7F5F0`, Islamic Emerald `#1A6B47`, Regal Gold `#D4A853`), tipografi (Playfair Display & Inter), animasi (`.ease-brand-pill`), dan format cetak A4 baku.
+- **System Design:** Rujuk ke [**README.md**](../../README.md) untuk diagram arsitektur teknis, alur 10 tahap pendaftar, webhook payment, dan spesifikasi container.
 - **No Static Logo:** Logo institusi selalu diambil dinamis via `settingsService.getLogo()` (GET `/companyprofile/settings/logo`).
 - **Live Updates:** Perubahan aset brand langsung terefleksi via Server-Sent Events (SSE) `/companyprofile/events`.
 - **`PageLoader` & `Skeleton`:** Loader animasi dual SVG arc spinner tanpa aset gambar statis.

@@ -28,6 +28,7 @@ export interface AuthUser {
   id: string
   username: string
   email: string
+  phone?: string
   full_name: string
   avatar_url: string
   role_id: string
@@ -37,6 +38,9 @@ export interface AuthUser {
   is_superadmin: boolean
   permissions: Record<string, string>
   page_permissions?: string[]
+  crud_permissions?: string[]
+  created_at?: string
+  last_login_at?: string
 }
 
 export interface LoginResponse {
@@ -61,11 +65,18 @@ export interface Page {
   label: string
   icon: string
   sort_order: number
+  has_crud?: boolean
+}
+
+export interface PagePermissionItem {
+  page_id: string
+  can_crud: boolean
 }
 
 export interface UserPagePermissions {
   user_id: string
   page_ids: string[]
+  permissions?: PagePermissionItem[]
 }
 
 export const MODULE_LABELS: Record<string, string> = {

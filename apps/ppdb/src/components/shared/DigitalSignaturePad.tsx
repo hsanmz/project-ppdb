@@ -129,10 +129,13 @@ export const DigitalSignaturePad = forwardRef<DigitalSignaturePadRef, DigitalSig
 
     return (
       <div className={`space-y-2 ${className}`}>
-        <div className="flex items-center justify-between text-xs text-slate-600">
-          <span className="flex items-center gap-1.5 font-medium">
-            <PenTool className="h-3.5 w-3.5 text-emerald-600" />
-            Tanda Tangan Digital Orang Tua / Wali
+        <div className="flex items-center justify-between text-xs text-slate-600 gap-2 pb-0.5">
+          <span className="flex items-center gap-1.5 font-medium min-w-0">
+            <PenTool className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span className="truncate">
+              <span className="hidden sm:inline">Tanda Tangan Digital Orang Tua / Wali</span>
+              <span className="sm:hidden">Area Tanda Tangan</span>
+            </span>
           </span>
           <Button
             type="button"
@@ -140,17 +143,18 @@ export const DigitalSignaturePad = forwardRef<DigitalSignaturePadRef, DigitalSig
             size="sm"
             onClick={handleClear}
             disabled={!hasDrawn || disabled}
-            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800 gap-1"
+            title="Ulangi tanda tangan"
+            className="h-6 px-2 text-[11px] text-slate-500 hover:text-slate-800 gap-1 shrink-0"
           >
             <RotateCcw className="h-3 w-3" />
-            Ulangi Tanda Tangan
+            Ulangi
           </Button>
         </div>
 
         <div className="relative border-2 border-dashed border-slate-300 rounded-xl bg-white overflow-hidden touch-none hover:border-emerald-500 transition-colors shadow-inner">
           <canvas
             ref={canvasRef}
-            className="w-full h-36 sm:h-44 cursor-crosshair block"
+            className="w-full h-40 sm:h-44 cursor-crosshair block"
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}
@@ -162,11 +166,13 @@ export const DigitalSignaturePad = forwardRef<DigitalSignaturePadRef, DigitalSig
 
           {/* Watermark Helper Text when empty */}
           {!hasDrawn && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-300 select-none space-y-1">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-300 select-none space-y-1.5 p-4 text-center">
               <PenTool className="h-6 w-6 opacity-40 text-slate-400" />
-              <p className="text-xs font-medium text-slate-400">Gambarkan tanda tangan Anda di area kotak ini</p>
-              <div className="w-48 h-[1px] bg-slate-200 mt-2 border-b border-dashed border-slate-300" />
-              <p className="text-[10px] text-slate-400 font-mono tracking-wider">AREA PENANDATANGAN RESMI</p>
+              <p className="text-xs sm:text-sm font-medium text-slate-400 text-center leading-snug max-w-[260px] sm:max-w-none">
+                Gambarkan tanda tangan Anda di area kotak ini
+              </p>
+              <div className="w-36 sm:w-48 h-[1px] bg-slate-200 my-1 border-b border-dashed border-slate-300" />
+              <p className="text-[10px] text-slate-400 font-mono tracking-widest text-center">AREA PENANDATANGAN RESMI</p>
             </div>
           )}
 

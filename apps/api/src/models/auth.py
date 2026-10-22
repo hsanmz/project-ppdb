@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base
@@ -55,6 +55,17 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Metadata sesi perangkat (dipakai halaman Profile → "Sesi Perangkat").
+    user_agent: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, default=None
+    )
+    ip_address: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, default=None
+    )
+    app: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None
+    )
 
 
 class UserPagePermission(Base):
@@ -67,6 +78,7 @@ class UserPagePermission(Base):
     page_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("pages.id", ondelete="CASCADE")
     )
+    can_crud: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -107,5 +119,8 @@ class Page(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     icon: Mapped[str] = mapped_column(String(50), default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    has_crud: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

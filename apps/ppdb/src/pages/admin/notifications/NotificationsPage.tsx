@@ -9,6 +9,7 @@ import PageHeaderCard, { type HeaderBlock } from '@/components/shared/PageHeader
 import { ConfirmDialog } from '@/components/ui/confirmdialog'
 import { useToast } from '@/components/Toast'
 import { apiFetch } from '@/api/client'
+import { useCanPage } from '@/hooks/useCan'
 import { notificationService } from '@/services'
 import {
   Card, CardContent,
@@ -104,6 +105,8 @@ const AVAILABLE_VARS = [
 
 const VAR_GROUPS = [...new Set(AVAILABLE_VARS.map(v => v.group))]
 
+const activeOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://ppdb.ptdarrahman.sch.id'
+
 const PREVIEW_CONTEXT: Record<string, string> = {
   '{nama_peserta}': 'Ahmad Fauzi',
   '{username}': 'ahmad.fauzi24',
@@ -111,10 +114,10 @@ const PREVIEW_CONTEXT: Record<string, string> = {
   '{phone}': '081234567890',
   '{password}': 'Pass1234',
   '{nama_sekolah}': "Pesantren Tahfidz Qur'an dan Digital Ar-Rahman",
-  '{link_login}': 'https://ppdb.ptdarrahman.sch.id/login',
-  '{link_aplikasi}': 'https://ppdb.ptdarrahman.sch.id/dashboard',
-  '{link_pembayaran}': 'https://ppdb.ptdarrahman.sch.id/payment',
-  '{link_panduan_seb}': 'https://ppdb.ptdarrahman.sch.id/panduan-seb',
+  '{link_login}': `${activeOrigin}/login`,
+  '{link_aplikasi}': `${activeOrigin}/dashboard`,
+  '{link_pembayaran}': `${activeOrigin}/payment`,
+  '{link_panduan_seb}': `${activeOrigin}/panduan-seb`,
   '{link_grup_whatsapp}': 'https://chat.whatsapp.com/contoh',
   '{nama_gelombang}': 'Gelombang 1 TA 2026/2027',
   '{tanggal_tutup}': '31 Oktober 2026',
@@ -240,7 +243,7 @@ function VarChip({
 
 // ── Tab: Kirim Pesan ──────────────────────────────────────────────────────────
 
-function SendTab({ templates }: { templates: Template[] }) {
+function SendTab({ templates, canCrud = true }: { templates: Template[]; canCrud?: boolean }) {
   const { toast } = useToast()
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [recLoading, setRecLoading] = useState(true)
@@ -467,14 +470,16 @@ function SendTab({ templates }: { templates: Template[] }) {
             </div>
           )}
 
-          <Button
-            className="w-full"
-            disabled={sending || selected.size === 0 || !body.trim()}
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Send className="h-4 w-4 mr-2" />
-            {sending ? 'Mengirim...' : `Kirim ke ${selected.size} Penerima`}
-          </Button>
+          {canCrud && (
+            <Button
+              className="w-full"
+              disabled={sending || selected.size === 0 || !body.trim()}
+              onClick={() => setConfirmOpen(true)}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {sending ? 'Mengirim...' : `Kirim ke ${selected.size} Penerima`}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -498,9 +503,10 @@ interface TemplateTabProps {
   loading: boolean
   /** Dipanggil setelah simpan agar parent refresh state-nya. */
   onRefresh: () => void
+  canCrud?: boolean
 }
 
-function TemplateTab({ templates, loading, onRefresh }: TemplateTabProps) {
+function TemplateTab({ templates, loading, onRefresh, canCrud = true }: TemplateTabProps) {
   const [editTarget, setEditTarget] = useState<Template | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [phaseFilter, setPhaseFilter] = useState('')
@@ -629,7 +635,7 @@ function TemplateTab({ templates, loading, onRefresh }: TemplateTabProps) {
                 <TableHead>Label / Fase</TableHead>
                 <TableHead className="whitespace-nowrap">Channel</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>
+                {canCrud && <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -676,15 +682,17 @@ function TemplateTab({ templates, loading, onRefresh }: TemplateTabProps) {
                             <Badge variant="destructive">Belum Ada</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {tpl ? (
-                            <Button variant="outline" size="sm" onClick={() => setEditTarget(tpl)}>
-                              <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">Perlu migration</span>
-                          )}
-                        </TableCell>
+                        {canCrud && (
+                          <TableCell className="text-right">
+                            {tpl ? (
+                              <Button variant="outline" size="sm" onClick={() => setEditTarget(tpl)}>
+                                <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">Perlu migration</span>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     )
                   })}
@@ -717,11 +725,13 @@ function TemplateTab({ templates, loading, onRefresh }: TemplateTabProps) {
                               {t.is_active ? 'Aktif' : 'Nonaktif'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="outline" size="sm" onClick={() => setEditTarget(t)}>
-                              <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
-                            </Button>
-                          </TableCell>
+                          {canCrud && (
+                            <TableCell className="text-right">
+                              <Button variant="outline" size="sm" onClick={() => setEditTarget(t)}>
+                                <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </>
@@ -1176,6 +1186,7 @@ function LogTab() {
 
 export default function NotificationsPage() {
   const { toast } = useToast()
+  const { canCrud } = useCanPage('notifications')
   const [templates, setTemplates] = useState<Template[]>([])
   const [tplLoading, setTplLoading] = useState(true)
   const [waReady, setWaReady] = useState(false)
@@ -1276,9 +1287,11 @@ export default function NotificationsPage() {
 
       <Tabs defaultValue="templates">
         <TabsList className="mb-2 max-w-full overflow-x-auto no-scrollbar justify-start">
-          <TabsTrigger value="send" className="flex items-center gap-1.5 whitespace-nowrap">
-            <Send className="h-3.5 w-3.5" />Kirim Pesan
-          </TabsTrigger>
+          {canCrud && (
+            <TabsTrigger value="send" className="flex items-center gap-1.5 whitespace-nowrap">
+              <Send className="h-3.5 w-3.5" />Kirim Pesan
+            </TabsTrigger>
+          )}
           <TabsTrigger value="templates" className="flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5" />Template
             {specCoveredCount < SPEC_EVENT_KEYS.length && (
@@ -1292,14 +1305,17 @@ export default function NotificationsPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="send">
-          <SendTab templates={ppdbTemplates} />
-        </TabsContent>
+        {canCrud && (
+          <TabsContent value="send">
+            <SendTab templates={ppdbTemplates} canCrud={canCrud} />
+          </TabsContent>
+        )}
         <TabsContent value="templates">
           <TemplateTab
             templates={ppdbTemplates}
             loading={tplLoading}
             onRefresh={fetchTemplates}
+            canCrud={canCrud}
           />
         </TabsContent>
         <TabsContent value="logs">

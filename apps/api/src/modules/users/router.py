@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from src.core.database import get_db
+from src.core.database import audit_log, get_db
 from src.core.dependencies import get_current_user, require_superadmin
 from src.core.events import user_hubs
 from src.modules.users.schemas import PagePermissionsUpdate, UserCreate, UserUpdate
@@ -48,7 +48,20 @@ def create_user(
     user: dict[str, Any] = Depends(require_superadmin),
 ):
     data = body.model_dump(exclude_unset=True)
-    return user_service.create_user(data)
+    res = user_service.create_user(data)
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="create",
+        entity_type="users",
+        entity_id=res.get("id"),
+        changes={
+            "username": res.get("username"),
+            "role_id": res.get("role_id"),
+            "user_type": res.get("user_type"),
+        },
+    )
+    return res
 
 
 @router.put("/{id}")
@@ -59,7 +72,17 @@ def update_user(
     user: dict[str, Any] = Depends(require_superadmin),
 ):
     data = body.model_dump(exclude_unset=True)
-    return user_service.update_user(id, data)
+    res = user_service.update_user(id, data)
+    safe_data = {k: v for k, v in data.items() if k != "password"}
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="update",
+        entity_type="users",
+        entity_id=id,
+        changes=safe_data,
+    )
+    return res
 
 
 @router.delete("/{id}")
@@ -69,6 +92,13 @@ def delete_user(
     user: dict[str, Any] = Depends(require_superadmin),
 ):
     user_service.delete_user(id, current_user_id=user.get("id"))
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="delete",
+        entity_type="users",
+        entity_id=id,
+    )
     return {"message": "Deleted"}
 
 
@@ -102,4 +132,8 @@ def update_page_permissions(
     user_service: UserService = Depends(get_user_service),
     user: dict[str, Any] = Depends(require_superadmin),
 ):
-    return user_service.update_page_permissions(id, body.page_ids)
+    if body.permissions is not None:
+        items: list[Any] = list(body.permissions)
+    else:
+        items = list(body.page_ids or [])
+    return user_service.update_page_permissions(id, items)

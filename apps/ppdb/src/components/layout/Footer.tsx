@@ -5,7 +5,7 @@ import VerseStrip from '@/components/ui/VerseStrip'
 import { ShapeDividerDiagonal } from '@/components/ui/shape-divider'
 import { socialLinks as staticSocialLinks, type SocialItem } from '@/data/social'
 import { apiFetch, API_BASE } from '@/api/client'
-import { useBrand } from '@repo/ui'
+import { useBrand, resolveCompanyProfileUrl } from '@repo/ui'
 
 interface ContactState {
   address: string
@@ -19,25 +19,12 @@ const FALLBACK_CONTACT: ContactState = {
   email: 'info@ptdarrahman.sch.id',
 }
 
-const getCompanyProfileBaseUrl = () => {
-  if (import.meta.env.VITE_COMPANY_PROFILE_URL) {
-    return (import.meta.env.VITE_COMPANY_PROFILE_URL as string).replace(/\/+$/, '')
-  }
-  if (typeof window !== 'undefined') {
-    const { hostname, protocol } = window.location
-    if (hostname.includes('ptdarrahman.sch.id')) {
-      return 'https://ptdarrahman.sch.id'
-    }
-    return `${protocol}//${hostname}:3000`
-  }
-  return 'http://localhost:3000'
-}
-
 export default function Footer() {
   const { logoUrl } = useBrand(API_BASE)
   const [socials, setSocials] = useState<SocialItem[]>(staticSocialLinks)
   const [contact, setContact] = useState<ContactState>(FALLBACK_CONTACT)
-  const cpUrl = getCompanyProfileBaseUrl()
+  const cpUrl = resolveCompanyProfileUrl(import.meta.env.VITE_COMPANY_PROFILE_URL)
+
 
   useEffect(() => {
     // Tautan sosial & info kontak dinamis dari API; fallback statis jika kosong/error.

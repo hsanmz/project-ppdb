@@ -23,7 +23,14 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
   - `/admin/login` — Redirect shim ke `/auth/login`
   - `/admin/overview` — Dashboard overview page (stats + per-section links into `/admin/dashboard`).
   - `/admin/dashboard` — Main CRUD dashboard (15 tabs, supports deep-link `?tab=...`). Tab `hero` mengelola slide hero beranda (`hero-slides`). Grup `PPDB` (jalur/pillars/steps/copy) memakai entitas generik yang sama; `ppdb-copy` singleton (tanpa tombol Buat Baru/Hapus).
+  - `/admin/profile` — Profile page for website admin (uses `@repo/ui/profile` with avatar editor, change password, and active device sessions).
   - `/admin` — Redirects to `/admin/overview` if `admin_user` exists in localStorage, else `/auth/login`.
+
+## Visual, Design System & 3D Hero Globe
+- **UI/UX Design System:** Rujuk ke [**DESIGN.md**](../../DESIGN.md) untuk sistem token warna (Warm Ivory `#F7F5F0`, Islamic Emerald `#1A6B47`, Regal Gold `#D4A853`), tipografi brand (`Playfair Display`, `DM Sans`, `Amiri`), serta kurva transisi `.ease-brand-pill`.
+- **System Design:** Rujuk ke [**README.md**](../../README.md) untuk arsitektur teknis lengkap, alur auth cookies, dan topologi jaringan monorepo.
+- **Hero 3D Globe:** Implementation in `components/ui/orbit-delivery-hero.tsx` (Three.js custom canvas) and decorative section waves (`HeroWaveSVG.tsx`, `CTAShapeDivider.tsx`).
+- For 3D architecture, model assets in `public/models/`, and procedural vs GLB globe caveats, see [**docs/HERO_3D_GLOBE.md**](../../docs/HERO_3D_GLOBE.md).
 
 ## Key Conventions
 - **Route Group**: `app/(main)/` contains all public pages wrapped with Navbar and Footer.

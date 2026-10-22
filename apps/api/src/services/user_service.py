@@ -3,7 +3,7 @@ import random
 import string
 import uuid
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -107,6 +107,7 @@ class UserService:
             "user_type": user.user_type,
             "role_id": user.role_id,
             "is_active": user.is_active,
+            "avatar_url": getattr(user, "avatar_url", "") or "",
             "created_at": user.created_at.strftime("%Y-%m-%d %H:%M:%S")
             if user.created_at
             else None,
@@ -254,22 +255,28 @@ class UserService:
             raise HTTPException(status_code=404, detail="User not found")
 
         page_ids = self.repository.get_page_permissions(user_id)
-        return {"user_id": user_id, "page_ids": page_ids}
+        permissions = self.repository.get_page_permissions_detail(user_id)
+        return {"user_id": user_id, "page_ids": page_ids, "permissions": permissions}
 
-    def update_page_permissions(self, user_id: str, page_ids: list[str]) -> dict:
+    def update_page_permissions(
+        self, user_id: str, items: list[str] | list[dict[str, Any]] | list[Any]
+    ) -> dict:
         user = self.repository.get_by_id(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        self.repository.set_page_permissions(user_id, page_ids)
+        self.repository.set_page_permissions(user_id, items)
         # Invalidate cache so re-fetched user has updated page_permissions
         invalidate_user_cache(user_id)
-        page_keys = self.repository.get_page_keys(user_id)
+        page_keys, crud_keys = self.repository.get_page_keys_and_crud(user_id)
         user_hubs.broadcast(
             user_id,
             {
                 "type": "page_permissions_changed",
                 "page_keys": page_keys,
+                "crud_keys": crud_keys,
             },
         )
-        return {"user_id": user_id, "page_ids": page_ids}
+        page_ids = self.repository.get_page_permissions(user_id)
+        permissions = self.repository.get_page_permissions_detail(user_id)
+        return {"user_id": user_id, "page_ids": page_ids, "permissions": permissions}

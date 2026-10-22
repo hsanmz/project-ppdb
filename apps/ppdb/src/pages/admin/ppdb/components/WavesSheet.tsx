@@ -2,7 +2,7 @@ import { useState, Fragment, useMemo } from 'react'
 import { ppdbService } from '@/services'
 import { apiFetch } from '@/api/client'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { cn } from '@/lib/utils'
 import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
@@ -91,7 +91,7 @@ const WAVE_MILESTONES: { step: string; label: string; get: (w: any) => string }[
 
 export default function WavesSheet({ period, onClose }: { period: any, onClose: () => void }) {
   const { toast } = useToast()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('periods')
   const queryClient = useQueryClient()
 
   const { data: waves = [], isLoading: loading } = useQuery({
@@ -688,7 +688,7 @@ export default function WavesSheet({ period, onClose }: { period: any, onClose: 
 
       {/* Modal Form Tambah / Edit Gelombang */}
       <Dialog open={showForm} onOpenChange={(v: boolean) => { setShowForm(v); if (!v) setFormError(null) }}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] flex flex-col p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>{editingWave ? 'Edit Gelombang' : 'Tambah Gelombang'}</DialogTitle>
             <DialogDescription>
@@ -697,7 +697,7 @@ export default function WavesSheet({ period, onClose }: { period: any, onClose: 
                 : `Konfigurasi gelombang baru untuk periode ${period?.name}. Rincian biaya diatur di panel Rincian Biaya.`}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(handleSave)} className="space-y-5 pt-2 max-h-[65vh] overflow-y-auto pr-1">
+          <form onSubmit={handleSubmit(handleSave)} className="space-y-5 pt-2 max-h-[65vh] overflow-y-auto flex-1 pr-1">
             <div className="space-y-2">
               <Label htmlFor="wave-name">Nama Gelombang *</Label>
               <Input id="wave-name" {...register('name')} placeholder="Contoh: Gelombang 1" disabled={!canCrud} />
@@ -780,7 +780,7 @@ export default function WavesSheet({ period, onClose }: { period: any, onClose: 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="wave-early-discount-quota">Kuota Diskon Pendaftar Awal</Label>
+                  <Label htmlFor="wave-early-discount-quota">Kuota Pendaftar Awal</Label>
                   <Input
                     id="wave-early-discount-quota"
                     type="number"
@@ -790,9 +790,6 @@ export default function WavesSheet({ period, onClose }: { period: any, onClose: 
                     disabled={!canCrud}
                   />
                   {errors.early_discount_quota && <p className="text-xs text-red-500">{errors.early_discount_quota.message}</p>}
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    * Dihitung dari {'{x}'} pembayaran formulir pertama yang berhasil.
-                  </p>
                 </div>
               </div>
             </div>
@@ -800,6 +797,10 @@ export default function WavesSheet({ period, onClose }: { period: any, onClose: 
             {formError && (
               <Alert type="error" title="Periksa kembali data Anda">{formError}</Alert>
             )}
+
+            <p className="text-[11px] text-muted-foreground leading-snug pt-2 border-t border-dashed">
+              * Dihitung dari {'{x}'} pembayaran formulir pertama yang berhasil.
+            </p>
 
             {canCrud && (
               <DialogFooter>

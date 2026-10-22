@@ -17,6 +17,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
@@ -33,12 +34,15 @@ from src.modules.ppdb.schemas import (
     ApplicantAdminUpdate,
     ApplicantChangePath,
     ApplicantPasswordReset,
+    ApplicantProfileUpdate,
     ApplicantRegister,
     DocumentVerify,
     LoASignatureRequest,
     PeriodCreate,
     PeriodUpdate,
     TIUSettingsUpdate,
+    TIUVerificationRequest,
+    TIUVerificationResponse,
     WaveCreate,
     WaveFeeItemCreate,
     WaveFeeItemUpdate,
@@ -127,6 +131,22 @@ def update_tiu_settings(
             body.webhook_secret or settings.tiu_webhook_secret
         ),
     }
+
+
+@router.post("/tiu-settings/verify", response_model=TIUVerificationResponse)
+def verify_tiu_settings(
+    body: TIUVerificationRequest | None = None,
+    user: dict = Depends(require_ppdb_admin),
+    db: Session = Depends(get_db),
+):
+    from src.services.tiu_verification_service import TIUVerificationService
+
+    svc = TIUVerificationService(db)
+    return svc.verify(
+        google_form_url=body.google_form_url if body else None,
+        duration_minutes=body.duration_minutes if body else None,
+        webhook_secret=body.webhook_secret if body else None,
+    )
 
 
 class TIUWebhookPayload(BaseModel):
@@ -238,8 +258,26 @@ def tiu_webhook(
         .first()
     )
     if score_entry:
-        score_entry.score = payload.score
-        score_entry.updated_at = now
+        if score_entry.score == payload.score:
+            return {
+                "status": "success",
+                "score": payload.score,
+                "already_recorded": True,
+            }
+        logger.warning(
+            "Webhook TIU ditolak: nilai untuk pendaftar %s "
+            "sudah tercatat final (%s vs %s)",
+            applicant.id,
+            score_entry.score,
+            payload.score,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Nilai ujian TIU sudah tercatat final "
+                f"({score_entry.score}) dan tidak dapat diubah."
+            ),
+        )
     else:
         import uuid
 
@@ -253,7 +291,34 @@ def tiu_webhook(
         )
         db.add(score_entry)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Jika request paralel lain sudah berhasil insert lebih dulu
+        existing = (
+            db.query(SelectionScore)
+            .filter(
+                SelectionScore.applicant_id == applicant.id,
+                SelectionScore.criteria_id == criteria.id,
+            )
+            .first()
+        )
+        if existing and existing.score == payload.score:
+            return {
+                "status": "success",
+                "score": payload.score,
+                "already_recorded": True,
+            }
+        elif existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Nilai ujian TIU sudah tercatat final "
+                    f"({existing.score}) dan tidak dapat diubah."
+                ),
+            )
+        raise
 
     try:
         from src.core.notif_service import send_notification
@@ -560,6 +625,28 @@ def create_applicant(
     return service.create_applicant(body)
 
 
+@router.get("/applicants/me")
+def get_my_applicant(
+    user: dict[str, Any] = Depends(get_current_user),
+    service: PPDBService = Depends(get_ppdb_service),
+):
+    """Ambil data formulir pendaftar untuk user calon santri yang sedang login."""
+    return service.get_my_applicant_profile(user["id"])
+
+
+@router.put("/applicants/me")
+def update_my_applicant(
+    body: ApplicantProfileUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    service: PPDBService = Depends(get_ppdb_service),
+):
+    """Pembaruan mandiri formulir pendaftaran oleh calon santri.
+
+    Dapat diubah selama proses seleksi hingga lulus tes / LoA resmi diterbitkan.
+    """
+    return service.update_my_applicant_profile(user["id"], body)
+
+
 @router.get("/applicants/{id}")
 def get_applicant(
     id: str,
@@ -573,7 +660,6 @@ def get_applicant(
 def update_applicant(
     id: str,
     body: ApplicantAdminUpdate,
-    ApplicantChangePath,
     user: dict = Depends(require_ppdb_admin),
     service: PPDBService = Depends(get_ppdb_service),
 ):

@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   KeyRound, Save, Timer, Link as LinkIcon, Info,
   CheckCircle2, AlertCircle, Eye, EyeOff, Copy, Check,
+  ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { apiFetch } from '@/api/client'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { Button, Card, CardContent, Input, Label, Badge } from '@/components/ui'
 import { DocTrigger } from '@repo/ui'
+import TIUVerificationModal from './components/TIUVerificationModal'
 
 type TIUSettings = {
   google_form_url: string
@@ -18,13 +20,24 @@ type TIUSettings = {
 
 export default function TIUSettingsPage() {
   const { toast } = useToast()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('tiu-settings')
   const queryClient = useQueryClient()
   const [formUrl, setFormUrl] = useState('')
   const [duration, setDuration] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
+
+  const formUrlRef = useRef<HTMLInputElement>(null)
+  const durationRef = useRef<HTMLInputElement>(null)
+  const secretRef = useRef<HTMLInputElement>(null)
+
+  const handleFixField = (field: 'url' | 'duration' | 'secret') => {
+    if (field === 'url') formUrlRef.current?.focus()
+    if (field === 'duration') durationRef.current?.focus()
+    if (field === 'secret') secretRef.current?.focus()
+  }
 
   const settingsQuery = useQuery({
     queryKey: ['ppdb-tiu-settings'],
@@ -56,6 +69,10 @@ export default function TIUSettingsPage() {
   })
 
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://DOMAIN_ANDA'
+  const sampleApiUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol}//api.${window.location.hostname.replace(/^(?:ppdb|admin|superadmin)\./i, '')}`
+    : 'https://api.ptdarrahman.sch.id'
+
   const appsScriptCode = `function onSubmit(e) {
   var formResponses = e.response.getItemResponses();
   var token = "";
@@ -161,6 +178,7 @@ export default function TIUSettingsPage() {
                 <span className="text-rose-500">*</span>
               </Label>
               <Input
+                ref={formUrlRef}
                 id="tiu-form-url"
                 type="url"
                 value={formUrl}
@@ -185,8 +203,9 @@ export default function TIUSettingsPage() {
                   Durasi Ujian
                   <span className="text-rose-500">*</span>
                 </Label>
-                <div className="flex items-center gap-2">
+                <div className="relative w-fit">
                   <Input
+                    ref={durationRef}
                     id="tiu-duration"
                     type="number"
                     min={1}
@@ -194,9 +213,11 @@ export default function TIUSettingsPage() {
                     value={duration}
                     onChange={e => setDuration(e.target.value)}
                     disabled={!canCrud || settingsQuery.isLoading || saveSettings.isPending}
-                    className="w-24 text-center font-bold text-sm"
+                    className="w-24 pr-10 text-center font-bold text-sm"
                   />
-                  <span className="text-xs text-muted-foreground font-medium">menit</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium select-none pointer-events-none">
+                    menit
+                  </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   Jawaban melewati batas waktu otomatis ditolak oleh sistem.
@@ -211,6 +232,7 @@ export default function TIUSettingsPage() {
                 </Label>
                 <div className="relative">
                   <Input
+                    ref={secretRef}
                     id="tiu-secret"
                     type={showSecret ? 'text' : 'password'}
                     autoComplete="new-password"
@@ -239,31 +261,46 @@ export default function TIUSettingsPage() {
             </div>
 
             {/* Simpan Footer */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-[11px] text-muted-foreground">
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVerifyOpen(true)}
+                    className="gap-1.5 h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer flex-1 sm:flex-none"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Uji Koneksi & Verifikasi
+                  </Button>
+                  {canCrud && (
+                    <Button
+                      size="sm"
+                      onClick={() => saveSettings.mutate()}
+                      disabled={
+                        settingsQuery.isLoading ||
+                        saveSettings.isPending ||
+                        !isFormValid
+                      }
+                      className="gap-1.5 h-8 px-3.5 text-xs font-medium flex-1 sm:flex-none"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground text-right">
                 Perubahan langsung berlaku ke seluruh pendaftaran aktif.
               </p>
-              <Button
-                onClick={() => saveSettings.mutate()}
-                disabled={
-                  !canCrud ||
-                  settingsQuery.isLoading ||
-                  saveSettings.isPending ||
-                  !isFormValid
-                }
-                className="gap-2 h-9 px-5 text-xs font-semibold w-full sm:w-auto shrink-0"
-              >
-                <Save className="h-3.5 w-3.5" />
-                {saveSettings.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
-              </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── KANAN: Panduan Integrasi (nempel pojok kanan, tanpa Card, scroll tanpa scrollbar) ── */}
+      {/* ── KANAN: Panduan Integrasi ── */}
       <aside className="w-full lg:w-[380px] xl:w-[420px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200/80 bg-slate-50/50 p-4 sm:p-6 flex flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {/* Header Panduan (Simple, no card container) */}
         <div className="flex items-center gap-2.5 pb-4 mb-5 border-b border-slate-200/70 shrink-0">
           <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
             <Info className="h-4 w-4" />
@@ -274,13 +311,10 @@ export default function TIUSettingsPage() {
           </div>
         </div>
 
-        {/* Isi Panduan */}
         <div className="space-y-5 text-xs text-slate-600">
           {/* Step 1 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              1
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">1</div>
             <div className="space-y-1">
               <h4 className="font-semibold text-xs text-slate-800">Pertanyaan Token di Google Form</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
@@ -293,9 +327,7 @@ export default function TIUSettingsPage() {
 
           {/* Step 2 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              2
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">2</div>
             <div className="space-y-1">
               <h4 className="font-semibold text-xs text-slate-800">Dapatkan Pre-filled URL</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
@@ -308,13 +340,18 @@ export default function TIUSettingsPage() {
 
           {/* Step 3 */}
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-              3
-            </div>
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">3</div>
             <div className="space-y-2.5 min-w-0 flex-1">
               <h4 className="font-semibold text-xs text-slate-800">Pasang Script Webhook</h4>
               <p className="leading-relaxed text-[11px] text-slate-500">
-                Buka <strong className="text-slate-700">Ekstensi → Apps Script</strong> di Google Form. Tempel kode di bawah, sesuaikan variabel <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">SECRET</code>, lalu buat pemicu (Trigger) <strong className="text-slate-700">Saat mengirim formulir</strong>.
+                Buka <strong className="text-slate-700">Ekstensi → Apps Script</strong> di Google Form. Tempel kode di bawah, lalu set <strong className="text-slate-700">Script Properties</strong> (<em>Project Settings → Script Properties</em>) dengan:
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-slate-500 space-y-0.5 pl-1">
+                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">PPDB_API_BASE</code> = <strong>URL API publik</strong> (contoh: <code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">{sampleApiUrl}</code>) — <span className="text-rose-600 font-medium">Jangan pakai localhost</span></li>
+                <li><code className="bg-white border border-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">TIU_WEBHOOK_SECRET</code> = sama persis dengan <strong>Webhook Secret</strong> di halaman ini</li>
+              </ul>
+              <p className="leading-relaxed text-[11px] text-slate-500">
+                Buat Trigger: <strong className="text-slate-700">Triggers → Add Trigger → onSubmit → From form → On form submit</strong>.
               </p>
 
               {/* Code Snippet Box */}
@@ -345,8 +382,43 @@ export default function TIUSettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Step 4 */}
+          <div className="h-px bg-slate-200/60" />
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">4</div>
+            <div className="space-y-2 min-w-0 flex-1">
+              <h4 className="font-semibold text-xs text-slate-800">Durasi Ujian & Verifikasi Wajib</h4>
+              <div className="p-3 rounded-xl border border-slate-200 bg-white/70 text-[11px] text-slate-500 leading-relaxed space-y-1.5">
+                <p><strong className="text-slate-700">Durasi = Server-side Guard (bukan timer Google Form)</strong>. Saat <code>.seb</code> diunduh, server mencatat <strong className="text-slate-700">waktu mulai</strong>. Webhook menolak submit jika:</p>
+                <code className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px] text-slate-800">waktu_submit &gt; waktu_mulai + durasi_menit + 5_menit_toleransi</code>
+                <p className="text-amber-700 font-medium">Ditolak HTTP 400 & nilai TIDAK tersimpan. Timer Google Form hanya visual.</p>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-white/70 text-[11px] text-slate-500 leading-relaxed space-y-2">
+                <p className="font-semibold text-slate-700">Verifikasi wajib sebelum ujian:</p>
+                <ol className="list-decimal list-inside space-y-1.5 pl-1">
+                  <li><strong className="text-slate-700">Uji Backend (cURL):</strong> Unduh <code>.seb</code> fresh, ambil <code>token</code> dari <code>startURL</code>, kirim POST ke <code>/ppdb/webhook/tiu</code> dengan header <code>X-TIU-Secret</code>. <span className="text-emerald-700">Harus return 200 OK</span>.</li>
+                  <li><strong className="text-slate-700">Cek Apps Script:</strong> Pastikan <code>PPDB_API_BASE</code> pakai <strong>API publik</strong> (bukan localhost). Lihat <strong>Apps Script → Executions</strong> → status <strong>Completed</strong>, log <code>Status Webhook: 200</code>.</li>
+                  <li><strong className="text-slate-700">End-to-End via SEB:</strong> Download <code>.seb</code> baru, jalankan di SEB → Google Form terbuka dengan <strong>Token terisi otomatis</strong> → Submit → Nilai TIU muncul langsung di Dashboard/Admin.</li>
+                </ol>
+                <p className="text-rose-600 font-medium">Jangan hanya mengandalkan copy-paste. Lakukan minimal 1x sebelum hari H.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
+
+      <TIUVerificationModal
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        formData={{
+          googleFormUrl: formUrl,
+          durationMinutes: duration,
+          webhookSecret: webhookSecret,
+        }}
+        onFixField={handleFixField}
+        onSave={() => saveSettings.mutate()}
+      />
     </div>
   )
 }

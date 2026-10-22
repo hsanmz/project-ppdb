@@ -38,11 +38,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     navigate('/auth/login')
   }
 
-  const pageSegment =
-    location.pathname === '/' || location.pathname === '/dashboard'
-      ? 'Overview'
-      : location.pathname.split('/')[1]
-
   const navGroups: DashboardNavGroup[] = [
     {
       label: 'Menu Utama',
@@ -69,8 +64,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }}
       navGroups={navGroups}
       renderLink={RouterDashboardLink}
-      title="Superadmin"
-      subtitle={pageSegment}
+      onNavigate={(item) => {
+        if (item.href) navigate(item.href)
+      }}
+      apiBase={API_BASE}
       roleLabel="Superadmin"
       storageKey="sa_collapsed"
       user={{
@@ -81,6 +78,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         role: 'Superadmin',
       }}
       onProfile={() => navigate('/profile')}
+      contentClassName={
+        location.pathname.startsWith('/whatsapp')
+          ? 'no-scrollbar'
+          : location.pathname.startsWith('/users/')
+            ? 'overflow-hidden no-scrollbar h-[calc(100dvh-3.5rem)]'
+            : undefined
+      }
       onLogout={handleLogout}
     >
       {children}

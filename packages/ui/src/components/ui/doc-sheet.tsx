@@ -38,6 +38,17 @@ export interface DocSection {
   content: React.ReactNode
 }
 
+const getApiWebhookUrl = () => {
+  if (typeof window === 'undefined') return 'https://api.ptdarrahman.sch.id/ppdb/webhook/tiu'
+  const { protocol, hostname } = window.location
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8000/ppdb/webhook/tiu`
+  }
+  const rootHost = hostname.replace(/^(?:ppdb|admin|superadmin)\./i, '')
+  return `${protocol}//api.${rootHost}/ppdb/webhook/tiu`
+}
+
+
 export interface DocItem {
   title: string
   subtitle: string
@@ -551,7 +562,10 @@ export const SYSTEM_DOCS: Record<string, DocItem> = {
             </div>
             <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
               <strong className="text-slate-900 block mb-0.5">2. Durasi Ujian (Menit):</strong>
-              Batas waktu pengerjaan. Server backend mencatat waktu mulai saat file <code>.seb</code> diunduh. Waktu submit Google Form tidak boleh melebihi durasi ini.
+              <p className="mb-1">Bukan timer tampilan Google Form, tetapi <strong>validasi server-side guard</strong>.</p>
+              <p className="mb-1">Saat file <code>.seb</code> diunduh, server mencatat <strong>waktu mulai</strong> (<code>created_at</code>). Webhook akan menolak submit jika:</p>
+              <code className="bg-white px-1.5 py-0.5 rounded text-slate-800">{'waktu_submit > waktu_mulai + durasi_menit + 5_menit_toleransi'}</code>
+              <p className="mt-1">Ditolak dengan HTTP 400 & nilai <strong>tidak</strong> tersimpan. Timer di Google Form hanya bersifat visual/pengingat.</p>
             </div>
             <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
               <strong className="text-slate-900 block mb-0.5">3. Webhook Secret (X-TIU-Secret):</strong>
@@ -570,6 +584,38 @@ export const SYSTEM_DOCS: Record<string, DocItem> = {
             <p>
               SEB mengunci seluruh layar peserta dan menyembunyikan bilah URL browser. Peserta hanya memiliki <strong>1 kali attempt ujian</strong>. Nilai yang masuk via webhook langsung dicatat idempoten dan memicu notifikasi WhatsApp nilai ke peserta.
             </p>
+          </div>
+        ),
+      },
+      {
+        number: 4,
+        title: 'Cara Memastikan TIU Berfungsi (Verifikasi Wajib)',
+        icon: BookOpen,
+        content: (
+          <div className="space-y-2 text-xs text-slate-700">
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <strong className="text-slate-900 block mb-1">Langkah 1: Uji Backend (cURL)</strong>
+              <p className="mb-1 leading-relaxed">Unduh <code>.seb</code> (fresh), ambil <code>token</code> dari <code>startURL</code>, lalu kirim:</p>
+              <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[10px] overflow-x-auto whitespace-pre-wrap break-all">
+{`curl -X POST "${getApiWebhookUrl()}" \\
+  -H "Content-Type: application/json" \\
+  -H "X-TIU-Secret: WEBHOOK_SECRET" \\
+  -d '{"token":"TOKEN","score":80}'`}
+              </pre>
+              <p className="mt-1 leading-relaxed"><strong>Expected:</strong> <code>200 OK</code> → <code>{'{"status":"success","score":80}'}</code>. <code>401</code>=secret salah, <code>404</code>=token tidak ditemukan, <code>400</code>=lewat batas waktu.</p>
+            </div>
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <strong className="text-slate-900 block mb-1">Langkah 2: Cek Apps Script</strong>
+              <p className="leading-relaxed">Pastikan <code>PPDB_API_BASE</code> menggunakan <strong>API publik</strong> (bukan <code>localhost</code>). Buat submit uji → <strong>Apps Script → Executions</strong> harus <strong>Completed</strong> dan log <code>Status Webhook: 200</code>.</p>
+            </div>
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <strong className="text-slate-900 block mb-1">Langkah 3: End-to-End via SEB</strong>
+              <p className="leading-relaxed">Download <code>.seb</code> baru, jalankan di SEB → Google Form terbuka dengan <strong>Token terisi otomatis</strong> → Submit → Nilai TIU harus <strong>langsung muncul</strong> di Dashboard/Admin dalam hitungan detik.</p>
+            </div>
+            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50">
+              <strong className="text-amber-900 block mb-0.5">Penting</strong>
+              <p className="text-amber-950 leading-relaxed">Jangan hanya mengandalkan copy-paste. Lakukan verifikasi di atas minimal 1x sebelum hari H untuk memastikan sistem bekerja dengan pasti.</p>
+            </div>
           </div>
         ),
       },

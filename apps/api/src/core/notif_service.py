@@ -28,7 +28,7 @@ import httpx
 from sqlalchemy import text
 
 from src.core.config import settings
-from src.core.database import create_record, get_raw_pool
+from src.core.database import create_record, get_raw_pool, update_record
 
 logger = logging.getLogger("ptdarrahman.notif")
 
@@ -150,6 +150,27 @@ def _log_notification(
     return log_id
 
 
+def _update_log_status(
+    log_id: str,
+    status: str | None = None,
+    error_message: str | None = None,
+    wa_message_id: str | None = None,
+) -> None:
+    """Safely update notification_logs status, error, and wa_message_id."""
+    try:
+        update_data: dict[str, Any] = {}
+        if status is not None:
+            update_data["status"] = status
+        if error_message is not None:
+            update_data["error_message"] = error_message
+        if wa_message_id is not None:
+            update_data["wa_message_id"] = wa_message_id
+        if update_data:
+            update_record("notification_logs", log_id, update_data)
+    except Exception:
+        logger.exception("Failed to update status for notification_log %s", log_id)
+
+
 # ── Core async send ───────────────────────────────────────────────────────────
 
 
@@ -254,38 +275,65 @@ async def _async_send_notifications(
                 status="queued",
             )
 
-            if channel in ("whatsapp", "both") and phone:
-                try:
-                    result = await _async_send_to_wa_service(
-                        phone=str(phone),
-                        message=body,
-                        event_key=event_key,
-                        recipient_user_id=str(user["id"]),
-                        template_id=template_id,
-                    )
+            if channel in ("whatsapp", "both"):
+                if not phone:
                     logger.info(
-                        "WA enqueued for %s (jobId=%s, logId=%s)",
+                        "Skipping WA for %s: phone missing for user %s",
                         event_key,
-                        result.get("data", {}).get("jobId"),
+                        user.get("id"),
+                    )
+                    _update_log_status(
                         log_id,
+                        status="failed",
+                        error_message="Nomor WhatsApp tidak tersedia",
                     )
-                except httpx.HTTPStatusError as e:
-                    logger.error(
-                        "WA microservice HTTP error for %s: %s",
-                        event_key,
-                        e.response.status_code,
-                        exc_info=True,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to send WA notification for event %s", event_key
-                    )
+                else:
+                    try:
+                        result = await _async_send_to_wa_service(
+                            phone=str(phone),
+                            message=body,
+                            event_key=event_key,
+                            recipient_user_id=str(user["id"]),
+                            template_id=template_id,
+                        )
+                        job_id = result.get("data", {}).get("jobId")
+                        if job_id and log_id:
+                            _update_log_status(log_id, wa_message_id=str(job_id))
+                        logger.info(
+                            "WA enqueued for %s (jobId=%s, logId=%s)",
+                            event_key,
+                            job_id,
+                            log_id,
+                        )
+                    except httpx.HTTPStatusError as e:
+                        logger.error(
+                            "WA microservice HTTP error for %s: %s",
+                            event_key,
+                            e.response.status_code,
+                            exc_info=True,
+                        )
+                        _update_log_status(
+                            log_id,
+                            status="failed",
+                            error_message=(
+                                f"HTTP {e.response.status_code}: "
+                                f"{e.response.text[:250]}"
+                            ),
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            "Failed to send WA notification for event %s", event_key
+                        )
+                        _update_log_status(
+                            log_id,
+                            status="failed",
+                            error_message=str(e)[:250],
+                        )
             else:
                 logger.info(
-                    "Skipping WA for %s: channel=%s phone=%s",
+                    "Skipping WA for %s: channel=%s",
                     event_key,
                     channel,
-                    "set" if phone else "missing",
                 )
 
     except Exception:
@@ -357,7 +405,7 @@ async def _async_send_custom_notifications(
             applicant = applicants_by_user_id.get(user_id, {})
             phone = applicant.get("phone") or user.get("phone", "")
 
-            _log_notification(
+            log_id = _log_notification(
                 template_id=None,
                 event_key=event_key,
                 recipient_user_id=user["id"],
@@ -370,19 +418,53 @@ async def _async_send_custom_notifications(
                 status="queued",
             )
 
-            if channel in ("whatsapp", "both") and phone:
-                try:
-                    await _async_send_to_wa_service(
-                        phone=str(phone),
-                        message=body,
-                        event_key=event_key,
-                        recipient_user_id=user["id"],
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to enqueue WA custom notification for user %s",
+            if channel in ("whatsapp", "both"):
+                if not phone:
+                    logger.info(
+                        "Skipping custom WA for user %s: phone missing",
                         user_id,
                     )
+                    _update_log_status(
+                        log_id,
+                        status="failed",
+                        error_message="Nomor WhatsApp tidak tersedia",
+                    )
+                else:
+                    try:
+                        result = await _async_send_to_wa_service(
+                            phone=str(phone),
+                            message=body,
+                            event_key=event_key,
+                            recipient_user_id=user["id"],
+                        )
+                        job_id = result.get("data", {}).get("jobId")
+                        if job_id and log_id:
+                            _update_log_status(log_id, wa_message_id=str(job_id))
+                    except httpx.HTTPStatusError as e:
+                        logger.error(
+                            "WA microservice HTTP error for custom blast user %s: %s",
+                            user_id,
+                            e.response.status_code,
+                            exc_info=True,
+                        )
+                        _update_log_status(
+                            log_id,
+                            status="failed",
+                            error_message=(
+                                f"HTTP {e.response.status_code}: "
+                                f"{e.response.text[:250]}"
+                            ),
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            "Failed to enqueue WA custom notification for user %s",
+                            user_id,
+                        )
+                        _update_log_status(
+                            log_id,
+                            status="failed",
+                            error_message=str(e)[:250],
+                        )
 
     except Exception:
         logger.exception("Async custom notification task failed")

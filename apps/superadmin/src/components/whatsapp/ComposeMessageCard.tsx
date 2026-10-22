@@ -54,7 +54,7 @@ export default function ComposeMessageCard({
       setTotalPages(res?.totalPages || 1)
       setTotal(res?.total || 0)
     } catch (e: any) {
-      setError(e.message || 'Gagal memuat daftar kontak')
+      setError(api.getErrorMessage(e, 'Gagal memuat daftar kontak'))
     } finally {
       setLoading(false)
     }
@@ -95,7 +95,7 @@ export default function ComposeMessageCard({
       setSelected(null)
       await load(page)
     } catch (e: any) {
-      setError(e.message || 'Gagal mengirim pesan')
+      setError(api.getErrorMessage(e, 'Gagal mengirim pesan'))
     } finally {
       setSending(false)
     }

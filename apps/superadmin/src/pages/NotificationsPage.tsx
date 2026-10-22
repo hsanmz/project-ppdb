@@ -77,16 +77,26 @@ const AVAILABLE_VARS = [
   { key: '{deadline_daftar_ulang}', desc: 'Deadline daftar ulang' },
 ]
 
+const getPpdbPreviewOrigin = () => {
+  if (typeof window === 'undefined') return 'https://ppdb.ptdarrahman.sch.id'
+  const { protocol, hostname } = window.location
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:5174`
+  }
+  const rootHost = hostname.replace(/^(?:superadmin|admin)\./i, '')
+  return `${protocol}//ppdb.${rootHost}`
+}
+
 const PREVIEW_CONTEXT: Record<string, string> = {
   '{nama_peserta}': 'Ahmad Fauzi',
   '{username}': 'ahmad.fauzi24',
   '{email}': 'ahmad@example.com',
   '{phone}': '081234567890',
   '{password}': 'Pass1234',
-  '{link_login}': 'https://ppdb.ptdarrahman.sch.id/auth/login',
+  '{link_login}': `${getPpdbPreviewOrigin()}/auth/login`,
   '{batas_waktu_bayar}': '2026-09-25 23:59',
   '{nominal_bayar}': 'Rp 350.000',
-  '{link_pembayaran}': 'https://ppdb.ptdarrahman.sch.id/checkout',
+  '{link_pembayaran}': `${getPpdbPreviewOrigin()}/checkout`,
   '{alasan_penolakan}': 'Foto tidak jelas / buram',
   '{alasan_gagal}': 'Saldo tidak mencukupi',
   '{tanggal_seleksi}': 'Sabtu, 10 Oktober 2026',
@@ -164,6 +174,10 @@ function SendTab({ templates }: { templates: Template[] }) {
   const { toast } = useToast()
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [recLoading, setRecLoading] = useState(true)
+  // Gagal memuat penerima ≠ "Tidak Ada Penerima".
+  const [recError, setRecError] = useState<string | null>(null)
+  // Increment untuk memicu muat ulang daftar penerima dari UI.
+  const [recRetry, setRecRetry] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
   const [channel, setChannel] = useState('whatsapp')
@@ -175,25 +189,38 @@ function SendTab({ templates }: { templates: Template[] }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      api.getUsers({ per_page: 500 }),
-      api.getApplicants({ perPage: 500 }),
-    ]).then(([usersRes, applicantsRes]) => {
-      const ul = Array.isArray(usersRes) ? usersRes : (usersRes as any).data ?? []
-      const al = (applicantsRes as any).data ?? []
-      const list: Recipient[] = [
-        ...ul.filter((u: any) => u.user_type !== 'superadmin').map((u: any) => ({
-          user_id: u.id, name: u.full_name || u.username, username: u.username,
-          email: u.email || '', phone: u.phone || '', type: 'Admin' as const,
-        })),
-        ...al.filter((a: any) => a.user_id).map((a: any) => ({
-          user_id: a.user_id, name: a.full_name, username: a.username || '',
-          email: a.email || '', phone: a.phone || '', type: 'Pendaftar' as const,
-        })),
-      ]
-      setRecipients(list)
-    }).catch(() => { }).finally(() => setRecLoading(false))
-  }, [])
+    let active = true
+    function loadRecipients() {
+      setRecLoading(true)
+      setRecError(null)
+      Promise.all([
+        api.getUsers({ per_page: 500 }),
+        api.getApplicants({ perPage: 500 }),
+      ]).then(([usersRes, applicantsRes]) => {
+        if (!active) return
+        const ul = Array.isArray(usersRes) ? usersRes : (usersRes as any).data ?? []
+        const al = (applicantsRes as any).data ?? []
+        const list: Recipient[] = [
+          ...ul.filter((u: any) => u.user_type !== 'superadmin').map((u: any) => ({
+            user_id: u.id, name: u.full_name || u.username, username: u.username,
+            email: u.email || '', phone: u.phone || '', type: 'Admin' as const,
+          })),
+          ...al.filter((a: any) => a.user_id).map((a: any) => ({
+            user_id: a.user_id, name: a.full_name, username: a.username || '',
+            email: a.email || '', phone: a.phone || '', type: 'Pendaftar' as const,
+          })),
+        ]
+        setRecipients(list)
+      }).catch((e) => {
+        if (!active) return
+        // Tandai error — jangan tampil sebagai "Tidak Ada Penerima".
+        setRecipients([])
+        setRecError(api.getErrorMessage(e, 'Gagal memuat daftar penerima.'))
+      }).finally(() => { if (active) setRecLoading(false) })
+    }
+    loadRecipients()
+    return () => { active = false }
+  }, [recRetry])
 
   const filtered = recipients.filter(r => {
     if (!filter) return true
@@ -231,7 +258,7 @@ function SendTab({ templates }: { templates: Template[] }) {
       toast('success', res?.message || `Notifikasi diantrekan ke ${selected.size} penerima`)
       setSelected(new Set()); setBody(''); setSubject('')
     } catch (e: any) {
-      toast('error', e.message || 'Gagal mengirim')
+      toast('error', api.getErrorMessage(e, 'Gagal mengirim'))
     } finally {
       setSending(false)
     }
@@ -264,6 +291,14 @@ function SendTab({ templates }: { templates: Template[] }) {
           <div className="max-h-72 overflow-y-auto rounded-xl border border-border p-1.5 space-y-0.5">
             {recLoading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Memuat data penerima...</p>
+            ) : recError ? (
+              <div className="py-8 text-center space-y-2">
+                <p className="text-sm font-semibold text-red-700">Gagal Memuat Daftar Penerima</p>
+                <p className="text-xs text-red-600 px-4">{recError}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRecRetry(n => n + 1)}>
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" /> Coba Lagi
+                </Button>
+              </div>
             ) : filtered.length === 0 ? (
               <EmptyState icon={Users} title="Tidak Ada Penerima" description="Tidak ada user yang cocok." className="bg-transparent border-transparent py-6" />
             ) : filtered.map(r => (
@@ -362,7 +397,7 @@ function TemplateTab() {
     return api.apiFetch<Template[]>('/notifications/templates')
       .then((res) => { setTemplates(res) })
       .catch((e: any) => {
-        toast('error', e.message || 'Gagal memuat template')
+        toast('error', api.getErrorMessage(e, 'Gagal memuat template'))
       })
       .finally(() => { setLoading(false) })
   }, [toast])
@@ -491,7 +526,7 @@ function TemplateEditDialog({ template, open, onClose, onSaved }: {
       toast('success', 'Template berhasil disimpan')
       onSaved()
     } catch (e: any) {
-      toast('error', e.message || 'Gagal menyimpan')
+      toast('error', api.getErrorMessage(e, 'Gagal menyimpan template'))
     } finally {
       setSaving(false)
     }
@@ -596,7 +631,7 @@ function LogTab() {
         setTotalPages(res?.totalPages ?? Math.ceil((res?.total ?? 0) / 20))
       })
       .catch((e: any) => {
-        toast('error', e.message || 'Gagal memuat log')
+        toast('error', api.getErrorMessage(e, 'Gagal memuat log'))
       })
       .finally(() => { setLoading(false) })
   }, [page, statusFilter, eventFilter, toast])
@@ -739,23 +774,27 @@ export default function NotificationsPage() {
   const { toast } = useToast()
   const [waConfigured, setWaConfigured] = useState(false)
   const [waReady, setWaReady] = useState(false)
+  // Gagal membaca status ≠ "belum dikonfigurasi".
+  const [waStatusError, setWaStatusError] = useState(false)
 
   useEffect(() => {
     api.waGetStatus()
       .then(s => {
         setWaConfigured(s?.configured === true)
         setWaReady(s?.isReady === true)
+        setWaStatusError(false)
       })
       .catch(() => {
         setWaConfigured(false)
         setWaReady(false)
+        setWaStatusError(true)
       })
   }, [])
 
   useEffect(() => {
     api.apiFetch<Template[]>('/notifications/templates')
       .then(setTemplates)
-      .catch((e: any) => toast('error', e.message || 'Gagal memuat template'))
+      .catch((e: any) => toast('error', api.getErrorMessage(e, 'Gagal memuat template')))
       .finally(() => setTplLoading(false))
   }, [toast])
 
@@ -766,17 +805,36 @@ export default function NotificationsPage() {
       <PageHero
         eyebrow="Komunikasi"
         title="Notifikasi"
-        description="Kirim pesan, kelola template, dan pantau log pengiriman via WhatsApp & Email."
+        description="Kirim pesan, kelola template, dan pantau log pengiriman notifikasi via WhatsApp."
         docKey="superadmin-notifications"
         loading={tplLoading && templates.length === 0}
         chips={[
           { icon: Bell, label: `${templates.length} Template` },
           { icon: CheckCircle2, label: `${activeCount} Aktif` },
-          { icon: waReady ? Zap : AlertTriangle, label: waReady ? 'WA: Terhubung' : waConfigured ? 'WA: Offline' : 'WA: Belum dikonfigurasi' },
+          {
+            icon: waStatusError ? AlertTriangle : waReady ? Zap : AlertTriangle,
+            label: waStatusError
+              ? 'WA: Status Tidak Diketahui'
+              : waReady ? 'WA: Terhubung' : waConfigured ? 'WA: Offline' : 'WA: Belum dikonfigurasi'
+          },
         ]}
       />
 
-      {!waConfigured && (
+      {waStatusError && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+          <div>
+            <p className="font-semibold">Status WhatsApp Tidak Dapat Dibaca</p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Gagal menghubungi endpoint status WhatsApp. Ini bisa berarti backend sedang
+              bermasalah — <strong>bukan</strong> berarti layanan belum dikonfigurasi. Muat
+              ulang halaman untuk mencoba lagi, atau cek log backend.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!waConfigured && !waStatusError && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
           <div>

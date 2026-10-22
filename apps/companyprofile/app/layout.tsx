@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import { Inter, DM_Sans, Playfair_Display, Amiri } from "next/font/google"
 import "./globals.css"
 import { Providers } from "./context/Providers"
@@ -8,6 +9,20 @@ import { getPublicSettings } from "./lib/server-settings"
 
 const FALLBACK_DESCRIPTION =
   "Pesantren Tahfidz Qur'an dan Digital Arrahman — Pesantren yang menggabungkan hafalan Al-Quran dengan pendidikan teknologi digital mutakhir di Bekasi, Jawa Barat."
+
+async function getSiteUrl(): Promise<string> {
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL
+  if (envUrl) return envUrl.replace(/\/+$/, '')
+  try {
+    const h = await headers()
+    const host = h.get('x-forwarded-host') || h.get('host')
+    const proto = h.get('x-forwarded-proto') || 'https'
+    if (host) return `${proto}://${host}`
+  } catch {
+    // fallback if headers() not available in static prerender
+  }
+  return 'https://ptdarrahman.sch.id'
+}
 
 const inter = Inter({
   variable: "--font-body",
@@ -46,6 +61,7 @@ const amiri = Amiri({
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicSettings()
+  const siteUrl = await getSiteUrl()
   const favicon = settings.favicon && !settings.favicon.startsWith(API_BASE)
     ? settings.favicon
     : undefined
@@ -59,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
     ? settings.logo
     : undefined
   return {
-    metadataBase: new URL('https://ptdarrahman.sch.id'),
+    metadataBase: new URL(siteUrl),
     title: {
       default: "Pesantren Tahfidz Qur'an dan Digital Arrahman",
       template: '%s | PTDARRAHMAN',
@@ -75,12 +91,12 @@ export async function generateMetadata(): Promise<Metadata> {
       telephone: false,
     },
     alternates: {
-      canonical: 'https://ptdarrahman.sch.id',
+      canonical: siteUrl,
     },
     openGraph: {
       type: 'website',
       locale: 'id_ID',
-      url: 'https://ptdarrahman.sch.id',
+      url: siteUrl,
       siteName: "Pesantren Tahfidz Qur'an dan Digital Arrahman",
       title: "Pesantren Tahfidz Qur'an dan Digital Arrahman",
       description,

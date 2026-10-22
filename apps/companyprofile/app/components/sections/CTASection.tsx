@@ -14,6 +14,8 @@ import { buildSchedule, type ActivePpdbWave } from '@/app/lib/ppdb'
 import { gsap, ScrollTrigger } from '@/app/lib/gsap'
 import { onLayoutReady, prefersReducedMotion } from '@/app/lib/motion'
 import CTAShapeDivider from '../ui/CTAShapeDivider'
+import { resolvePortalUrl } from '@repo/ui'
+
 
 const Particles = dynamic(() => import('../ui/Particles'), { ssr: false })
 
@@ -97,7 +99,7 @@ export default function CTASection({ wave = null }: { wave?: ActivePpdbWave | nu
             <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-4 sm:mt-8">
               <WiggleMagneticButton strength={0.6}>
                 <Link
-                  href={process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:5174'}
+                  href={resolvePortalUrl(process.env.NEXT_PUBLIC_PORTAL_URL)}
                   className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-[var(--color-gold)] text-[var(--text)] text-xs sm:text-sm font-bold rounded-full shadow-xl hover:shadow-2xl hover:bg-[var(--color-gold-light)] transition-all"
                 >
                   {'Daftar Sekarang'}

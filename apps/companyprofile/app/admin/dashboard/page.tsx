@@ -227,6 +227,7 @@ export default function AdminDashboard() {
   // ── Auth state ────────────────────────────────────────────────────────────
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [pagePermissions, setPagePermissions] = useState<string[] | null>(null)
+  const [crudPermissions, setCrudPermissions] = useState<string[] | null>(null)
   const faviconUrl = useAdminFavicon()
 
   const isSuperadmin =
@@ -234,7 +235,11 @@ export default function AdminDashboard() {
 
   const canCrud =
     isSuperadmin ||
-    adminUser?.permissions?.companyprofile === 'crud'
+    (crudPermissions !== null
+      ? crudPermissions.includes(activeTab)
+      : adminUser?.crud_permissions
+      ? adminUser.crud_permissions.includes(activeTab)
+      : adminUser?.permissions?.companyprofile === 'crud')
 
   const filteredTabs =
     isSuperadmin
@@ -272,6 +277,9 @@ export default function AdminDashboard() {
         setPagePermissions(
           data.page_keys && data.page_keys.length > 0 ? data.page_keys : null,
         )
+        if (Array.isArray(data.crud_keys)) {
+          setCrudPermissions(data.crud_keys)
+        }
       } catch { /* ignore */ }
     })
     return () => es.close()
@@ -363,6 +371,9 @@ export default function AdminDashboard() {
             if (me) {
               localStorage.setItem('admin_user', JSON.stringify(me))
               setAdminUser(me)
+              if (me.crud_permissions) {
+                setCrudPermissions(me.crud_permissions)
+              }
             }
           } catch {
             localStorage.removeItem('admin_user')
@@ -376,6 +387,9 @@ export default function AdminDashboard() {
         setAdminUser(parsed)
         if (parsed.page_permissions?.length > 0) {
           setPagePermissions(parsed.page_permissions)
+        }
+        if (parsed.crud_permissions) {
+          setCrudPermissions(parsed.crud_permissions)
         }
       } catch {
         localStorage.removeItem('admin_user')
@@ -526,8 +540,19 @@ export default function AdminDashboard() {
         }}
         navGroups={navGroups}
         renderLink={AdminDashboardLink}
-        title="Admin CMS"
-        subtitle="Kelola Konten"
+        onNavigate={(item) => {
+          if (item.onClick) {
+            item.onClick()
+          } else if (item.href) {
+            const tabMatch = item.href.match(/tab=([^&]+)/)
+            if (tabMatch && tabMatch[1]) {
+              setActiveTab(tabMatch[1])
+            } else {
+              router.push(item.href)
+            }
+          }
+        }}
+        apiBase={api.API_BASE}
         contentClassName="animate-fade-in"
         storageKey="cp_collapsed"
         roleLabel={adminUser?.role_name || adminUser?.user_type}
@@ -538,7 +563,7 @@ export default function AdminDashboard() {
           avatarUrl: adminUser?.avatar_url,
           role: adminUser?.role_name || adminUser?.user_type,
         }}
-        onProfile={() => setProfileOpen(true)}
+        onProfile={() => router.push('/admin/profile')}
         onViewSite={() => window.open('/', '_blank')}
         onLogout={handleLogout}
         sidebarFooter={<AdminSidebarFooter />}
@@ -551,7 +576,7 @@ export default function AdminDashboard() {
             <div className="absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-[#D4A853]/30 blur-2xl pointer-events-none" />
             <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
               <div className="flex items-start gap-4">
-                <div className="hidden sm:flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm text-white shadow-inner shrink-0">
+                <div className="hidden sm:flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-white shadow-inner shrink-0">
                   <activeTabDef.icon className="h-7 w-7" />
                 </div>
                 <div className="min-w-0">
@@ -569,7 +594,7 @@ export default function AdminDashboard() {
               </div>
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 {activeTab !== 'settings' && activeTab !== 'contact' && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-sm px-3.5 py-1.5 text-xs font-semibold shadow-inner" title="Jumlah item">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3.5 py-1.5 text-xs font-semibold" title="Jumlah item">
                     <FolderOpen className="h-3.5 w-3.5" />
                     {items.length} item
                   </span>
@@ -597,7 +622,7 @@ export default function AdminDashboard() {
           {/* Skeletons */}
           {loading && (
             <>
-              <div className="hidden md:block bg-white/50 rounded-2xl border border-[var(--border)] p-4">
+              <div className="hidden md:block bg-card rounded-2xl border border-border p-4">
                 <TableSkeleton />
               </div>
               <div className="md:hidden">
@@ -647,7 +672,7 @@ export default function AdminDashboard() {
 
           {/* Staff org chart */}
           {activeTab === 'staff' && !loading && items.length > 0 && (
-            <Card className="border-border shadow-sm bg-white/60 backdrop-blur-sm p-6 mb-6">
+            <Card className="border-border shadow-sm bg-card p-6 mb-6">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Struktur Organisasi</h3>
               <p className="text-xs text-muted-foreground mb-4">Klik kartu untuk mengedit data staff. Posisi diatur lewat field “Atasan” dan “Urutan Tampilan” pada form edit.</p>
               <StaffOrgChart
@@ -811,7 +836,7 @@ export default function AdminDashboard() {
         />
       )}
 
-      {profileOpen && <ProfileModal open onClose={() => setProfileOpen(false)} />}
+      {false && profileOpen && false}
       <CrossTabSync />
     </>
   )

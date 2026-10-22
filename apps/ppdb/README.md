@@ -22,6 +22,7 @@ Aplikasi frontend berbasis **Vite + React + TypeScript** untuk sistem Penerimaan
 - 📜 **Kelulusan & Tanda Tangan LoA:** Preview Letter of Acceptance (LoA) resmi dan pembubuhan tanda tangan digital orang tua.
 - 💰 **Pembayaran Tahap 2 (DP & Cicilan):** Pembayaran DP via QRIS, simulasi/pengaturan skema cicilan biaya pendidikan, dan pengunggahan bukti pembayaran.
 - 🎓 **SKD & Komunitas Resmi:** Penerbitan Surat Keterangan Diterima (SKD) bernomor registrasi resmi dan tautan bergabung ke WhatsApp Group angkatan.
+- 👤 **Profil Mandiri & Keamanan Sesi:** Peninjauan dan pembaruan data formulir pendaftaran serta kuesioner kesehatan secara mandiri di `/applicant/profile`, editor foto avatar, ganti kata sandi, dan pemantauan sesi login aktif.
 
 ### 🛡️ Backoffice Admin PPDB (`/admin/*`)
 - 📊 **Monitoring Pendaftar:** Pelacakan status berkas, verifikasi dokumen, dan kuesioner kesehatan.
@@ -29,6 +30,8 @@ Aplikasi frontend berbasis **Vite + React + TypeScript** untuk sistem Penerimaan
 - 📝 **Pengaturan TIU & Rubrik:** Konfigurasi Pre-filled URL Google Form, durasi ujian, secret webhook Apps Script, dan bobot rubrik.
 - 🎙️ **Penjadwalan 1:1:** Manajemen slot penguji Tahfidz dan pewawancara.
 - ⚖️ **Penilaian & LoA:** Input skor evaluator, penentuan status kelulusan, dan review LoA pendaftar.
+- 💳 **Monitoring Keuangan & Detail Cicilan (`/admin/pembayaran-tahap2/:id`):** Pemantauan pembayaran formulir serta buku besar detail per pendaftar (status DP, skema cicilan, jatuh tempo termin, dan riwayat kuitansi).
+- 🖨️ **Cetak Dokumen Resmi:** Engine cetak layout baku A4 langsung dari browser (Formulir Pendaftar, Lembar Penilaian, Kuitansi Resmi, LoA, dan SKD).
 - 🗄️ **Arsip Dossier:** Pencarian data dossier lengkap lintas periode dan gelombang, serta ekspor bundle ZIP satu-klik dengan log audit.
 
 ### 🌐 Rute Verifikasi Publik (Tanpa Login)

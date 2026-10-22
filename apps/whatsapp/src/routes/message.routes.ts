@@ -312,8 +312,18 @@ router.post("/bulk", sendRateLimiter, async (req: Request, res: Response) => {
 
 // GET /api/messages/queue
 router.get("/queue", async (_req: Request, res: Response) => {
-  const stats = await getQueueStats();
-  res.json({ success: true, data: stats });
+  try {
+    const stats = await getQueueStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    logger.warn("[Queue] Redis offline / tidak dapat diakses untuk queue stats", {
+      error: (err as Error).message,
+    });
+    res.json({
+      success: true,
+      data: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
+    });
+  }
 });
 
 // GET /api/messages/logs

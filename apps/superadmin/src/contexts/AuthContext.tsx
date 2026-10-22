@@ -1,6 +1,16 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import type { AuthUser } from '../types'
 import * as api from '../api/client'
+
+/**
+ * Tandai sesi berakhir lalu pindah ke halaman login. Flag di sessionStorage
+ * dibaca LoginPage untuk menampilkan pesan "sesi berakhir" — window.location
+ * memuat ulang seluruh aplikasi sehingga toast biasa tidak sempat tampil.
+ */
+function forceSessionExpiredRedirect() {
+  sessionStorage.setItem('sa_session_expired', '1')
+  window.location.href = '/auth/login'
+}
 
 interface AuthContextType {
   user: AuthUser | null
@@ -25,6 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // loading hanya true jika ada sesi tersimpan yang perlu divalidasi ke backend.
   // Tanpa sesi tersimpan, langsung false agar ProtectedRoute redirect ke /auth/login.
   const [loading, setLoading] = useState(() => !!api.getStoredUser())
+  // Hitung kegagalan getMe berturut-turut saat revalidasi berkala.
+  const consecutiveFailures = useRef(0)
 
   useEffect(() => {
     if (!api.getStoredUser()) return
@@ -35,10 +47,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Revalidasi berkala: akun yang dinonaktifkan (is_active=false) atau token
     // yang di-revoke saat sesi berjalan akan segera di-kick ke /auth/login.
+    // Sesi yang benar-benar berakhir (401) langsung keluar; kegagalan lain
+    // (jaringan/blip server) ditoleransi 3 kali berturut-turut agar user tidak
+    // di-kick hanya karena gangguan sementara.
     const interval = window.setInterval(() => {
-      api.getMe().then((u) => setUser(u)).catch(() => {
-        setUser(null)
-        window.location.href = '/auth/login'
+      api.getMe().then((u) => {
+        setUser(u)
+        consecutiveFailures.current = 0
+      }).catch((e) => {
+        if (api.isApiError(e) && e.status === 401) {
+          setUser(null)
+          forceSessionExpiredRedirect()
+          return
+        }
+        consecutiveFailures.current += 1
+        if (consecutiveFailures.current >= 3) {
+          setUser(null)
+          forceSessionExpiredRedirect()
+        }
       })
     }, 60_000)
 

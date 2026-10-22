@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Input, Label, SelectField, Textarea } from '@/components/ui'
 import type { ApplicantWave } from '../../api/client'
+import ApplicantHealthForm from './ApplicantHealthForm'
+import {
+  emptyHealth,
+  isHealthEmpty,
+  parseHealthData,
+  serializeHealthData,
+  validateHealthData,
+  type HealthIdentificationData,
+} from './health'
 import {
   APPLICANT_STATUSES,
   PAYMENT_STATUSES,
@@ -38,7 +47,6 @@ const EMPTY_FORM: Record<string, string> = {
   village: '',
   postal_code: '',
   address: '',
-  disease_history: '',
   status: 'pending_payment',
   payment_status: 'pending',
 }
@@ -90,46 +98,68 @@ function Field({
 }
 
 /**
- * Form data pendaftar untuk Create & Edit.
+ * Susun state form dari data pendaftar (`initial`).
+ */
+function buildFormState(initial?: any): FormState {
+  const next: FormState = { ...EMPTY_FORM }
+  if (initial) {
+    for (const key of Object.keys(EMPTY_FORM)) {
+      const v = initial[key]
+      next[key] = v === null || v === undefined ? '' : String(v)
+    }
+  }
+  return next
+}
+
+/**
+ * Parse kuesioner kesehatan dari `initial`.
+ *
+ * Bila `disease_history` bukan JSON kuesioner (data lama berupa teks bebas),
+ * nilai mentahnya dipertahankan di `legacy` supaya tidak rusak saat disimpan
+ * ulang.
+ */
+function parseInitialHealth(initial?: any): {
+  health: HealthIdentificationData
+  legacy: string
+} {
+  const raw = initial?.disease_history
+  const parsed = typeof raw === 'string' ? parseHealthData(raw) : null
+  if (parsed) return { health: parsed, legacy: '' }
+  if (typeof raw === 'string' && raw.trim()) {
+    return { health: emptyHealth(), legacy: raw }
+  }
+  return { health: emptyHealth(), legacy: '' }
+}
+
+/**
+ * Form edit data pendaftar.
+ *
+ * Hanya untuk EDIT — pembuatan pendaftar tidak lagi tersedia di panel ini;
+ * akun pendaftar dibuat otomatis saat calon santri mendaftar.
  *
  * Password SENGAJA tidak ada di sini — konsep kredensial tetap seperti semula:
  * username & password dibuat sistem, dan perubahan password hanya lewat aksi
  * "Reset Password" terpisah.
  */
 export default function ApplicantForm({
-  mode,
+  formId,
   initial,
   waves,
-  submitting,
   onSubmit,
-  onCancel,
-  submitLabel,
 }: {
-  mode: 'create' | 'edit'
+  formId: string
   initial?: any
   waves: ApplicantWave[]
-  submitting: boolean
   onSubmit: (payload: Record<string, string>) => void
-  onCancel: () => void
-  submitLabel: string
 }) {
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [form, setForm] = useState<FormState>(() => buildFormState(initial))
+  const [health, setHealth] = useState<HealthIdentificationData>(
+    () => parseInitialHealth(initial).health
+  )
+  const [legacyHealth, setLegacyHealth] = useState(
+    () => parseInitialHealth(initial).legacy
+  )
   const [errors, setErrors] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (mode === 'edit' && initial) {
-      const next: FormState = { ...EMPTY_FORM }
-      for (const key of Object.keys(EMPTY_FORM)) {
-        const v = initial[key]
-        next[key] = v === null || v === undefined ? '' : String(v)
-      }
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm(next)
-    } else {
-      setForm({ ...EMPTY_FORM })
-    }
-    setErrors({})
-  }, [mode, initial])
 
   const waveOptions = useMemo(
     () => [
@@ -170,6 +200,14 @@ export default function ApplicantForm({
     if (form.nik.trim() && !/^\d{16}$/.test(form.nik.trim()))
       next.nik = 'NIK harus 16 digit angka'
 
+    // Validasi kuesioner kesehatan: hanya bila datanya sudah ada sebelumnya,
+    // atau admin benar-benar mengisinya. Pendaftar tanpa data kesehatan tidak
+    // dipaksa melengkapinya hanya untuk mengubah data lain.
+    const shouldValidateHealth = !!legacyHealth || !isHealthEmpty(health)
+    if (shouldValidateHealth && !legacyHealth) {
+      Object.assign(next, validateHealthData(health))
+    }
+
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -177,11 +215,19 @@ export default function ApplicantForm({
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!validate()) return
-    onSubmit(form)
+    // Kirim kuesioner kesehatan sebagai `disease_history` (JSON) agar tidak
+    // menimpa struktur data yang sudah ada.
+    const payload: Record<string, string> = { ...form }
+    if (legacyHealth) {
+      payload.disease_history = legacyHealth
+    } else if (!isHealthEmpty(health)) {
+      payload.disease_history = serializeHealthData(health)
+    }
+    onSubmit(payload)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       <section className="space-y-4">
         <h4 className="text-sm font-semibold">Penempatan & Jalur</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -206,22 +252,18 @@ export default function ApplicantForm({
             onValueChange={(v) => set('registration_path', v)}
           />
 
-          {mode === 'edit' && (
-            <>
-              <SelectField
-                label="Status Pendaftaran"
-                options={APPLICANT_STATUSES}
-                value={form.status}
-                onValueChange={(v) => set('status', v)}
-              />
-              <SelectField
-                label="Status Pembayaran"
-                options={PAYMENT_STATUSES}
-                value={form.payment_status}
-                onValueChange={(v) => set('payment_status', v)}
-              />
-            </>
-          )}
+          <SelectField
+            label="Status Pendaftaran"
+            options={APPLICANT_STATUSES}
+            value={form.status}
+            onValueChange={(v) => set('status', v)}
+          />
+          <SelectField
+            label="Status Pembayaran"
+            options={PAYMENT_STATUSES}
+            value={form.payment_status}
+            onValueChange={(v) => set('payment_status', v)}
+          />
         </div>
       </section>
 
@@ -296,12 +338,6 @@ export default function ApplicantForm({
             label="Asal Sekolah"
             name="previous_school"
             value={form.previous_school}
-            onChange={set}
-          />
-          <Field
-            label="Pilihan Jurusan"
-            name="major_choice"
-            value={form.major_choice}
             onChange={set}
           />
         </div>
@@ -379,19 +415,32 @@ export default function ApplicantForm({
       </section>
 
       <section className="space-y-4 border-t pt-4">
-        <h4 className="text-sm font-semibold">Kesehatan</h4>
-        <Textarea
-          id="af-disease_history"
-          label="Riwayat Penyakit / Alergi"
-          rows={3}
-          maxLength={255}
-          helperText="Pengganti dokumen medical checkup. Maksimal 255 karakter, tulis '-' bila tidak ada."
-          placeholder="mis. Tidak ada riwayat penyakit bawaan"
-          value={form.disease_history}
-          onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-            set('disease_history', e.target.value.slice(0, 255))
-          }
-        />
+        <div>
+          <h4 className="text-sm font-semibold">Formulir Identifikasi Kesehatan</h4>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Kuesioner 10 pertanyaan sesuai formulir pendaftaran (pengganti
+            medical checkup).
+          </p>
+        </div>
+        {legacyHealth ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="af-disease_history" className="text-xs font-semibold">
+              Riwayat Kesehatan (data lama)
+            </Label>
+            <Textarea
+              id="af-disease_history"
+              rows={3}
+              value={legacyHealth}
+              onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                setLegacyHealth(e.target.value)
+              }
+              helperText="Data ini tersimpan dalam format lama, bukan kuesioner 10 pertanyaan."
+              placeholder="mis. Tidak ada riwayat penyakit bawaan"
+            />
+          </div>
+        ) : (
+          <ApplicantHealthForm value={health} onChange={setHealth} errors={errors} />
+        )}
       </section>
 
       {Object.keys(errors).length > 0 && (
@@ -403,24 +452,6 @@ export default function ApplicantForm({
           </ul>
         </div>
       )}
-
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={submitting}
-          className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-        >
-          Batal
-        </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-        >
-          {submitting ? 'Menyimpan...' : submitLabel}
-        </button>
-      </div>
     </form>
   )
 }

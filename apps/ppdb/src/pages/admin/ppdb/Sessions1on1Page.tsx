@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '@/api/client'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Card,
@@ -48,7 +48,7 @@ export default function Sessions1on1Page({ forcedType }: Sessions1on1PageProps) 
   const navigate = useNavigate()
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('sessions')
   const { user } = useAuth()
 
   // Determine session type (tahfidz or interview)

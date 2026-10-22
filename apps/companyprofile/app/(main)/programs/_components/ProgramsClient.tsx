@@ -8,6 +8,8 @@ import { useScrollReveal } from '@/app/hooks/useScrollAnimations'
 import type { Program } from '@/app/lib/types'
 import { BookOpen, Cpu, Globe, Award, Clock, Layers, Check, ArrowRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { resolvePortalUrl } from '@repo/ui'
+
 
 const iconMap: Record<string, typeof BookOpen> = {
   'book-quran': BookOpen,
@@ -287,7 +289,7 @@ export default function ProgramsClient({ programs }: { programs: Program[] }) {
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
                   <a
-                    href={process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:5174'}
+                    href={resolvePortalUrl(process.env.NEXT_PUBLIC_PORTAL_URL)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-ghost"

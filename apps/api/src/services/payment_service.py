@@ -1042,6 +1042,9 @@ class PaymentService:
     def _settle_successful_transaction(
         self, tx: PPDBPaymentTransaction, gateway_payload: Any = None
     ) -> dict:
+        fresh_tx = self.repo.get_transaction_by_id(tx.id)
+        if fresh_tx:
+            tx = fresh_tx
         if tx.status in ("success", "paid"):
             return {"status": "success", "already_settled": True}
 
@@ -1665,59 +1668,137 @@ class PaymentService:
                 "transaction_id": tx.id,
             }
 
-        # Validasi nominal jika disediakan
-        if amount is not None:
+        # Atomic lock untuk mencegah race condition / concurrent replay
+        from src.core.cache import get_redis
+
+        r = get_redis()
+        lock_key = f"lock:pakasir_webhook:{tx.id}"
+        lock_token = str(uuid.uuid4())
+        lock_acquired = False
+        if r is not None:
             try:
-                amt_int = int(amount)
-                if amt_int != tx.amount:
-                    logger.warning(
-                        "Webhook nominal tidak cocok untuk tx %s: DB=%s, Payload=%s",
+                lock_acquired = bool(r.set(lock_key, lock_token, nx=True, ex=30))
+                if not lock_acquired:
+                    logger.info(
+                        "Webhook Pakasir untuk tx %s sedang diproses "
+                        "konkuren - menunggu",
                         tx.id,
-                        tx.amount,
-                        amt_int,
                     )
-                    tx.notes = (
-                        "[ANOMALI WEBHOOK] Nominal tidak cocok: "
-                        f"DB={tx.amount}, Payload={amt_int}"
-                    )
-                    self.repo.update_transaction(tx)
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Nominal webhook tidak cocok dengan tagihan",
-                    )
-            except (ValueError, TypeError):
-                pass
+                    # Poll sampai 5x (total 1.5s) menunggu transaksi
+                    # selesai diproses
+                    for _ in range(5):
+                        time.sleep(0.3)
+                        refreshed_tx = self.repo.get_transaction_by_id(tx.id)
+                        if refreshed_tx and refreshed_tx.status in ("success", "paid"):
+                            return {
+                                "success": True,
+                                "message": "Transaksi sudah tercatat lunas sebelumnya",
+                                "status": "already_paid",
+                                "transaction_id": refreshed_tx.id,
+                            }
+                        if r.set(lock_key, lock_token, nx=True, ex=30):
+                            lock_acquired = True
+                            break
 
-        now_wib = datetime.now(WIB)
-        provider_state = canonical_status(status)
-        is_success = provider_state == STATUS_COMPLETED
-        is_failed = provider_state == STATUS_CANCELED
+                    if not lock_acquired:
+                        logger.warning(
+                            "Webhook Pakasir untuk tx %s ditolak: "
+                            "masih dikunci proses lain",
+                            tx.id,
+                        )
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "Transaksi sedang diproses secara bersamaan. "
+                                "Silakan coba sesaat lagi."
+                            ),
+                        )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.warning("Gagal acquire Redis lock: %s", exc)
 
-        if is_success:
-            res = self._settle_successful_transaction(tx, gateway_payload=payload)
+        try:
+            # Re-fetch status transaksi terbaru di bawah lock agar tidak
+            # memakai objek stale
+            fresh_tx = self.repo.get_transaction_by_id(tx.id)
+            if fresh_tx:
+                tx = fresh_tx
+                if tx.status in ("success", "paid"):
+                    return {
+                        "success": True,
+                        "message": "Transaksi sudah tercatat lunas sebelumnya",
+                        "status": "already_paid",
+                        "transaction_id": tx.id,
+                    }
+
+            # Validasi nominal jika disediakan
+            if amount is not None:
+                try:
+                    amt_int = int(amount)
+                    if amt_int != tx.amount:
+                        logger.warning(
+                            "Webhook nominal tidak cocok untuk tx %s: "
+                            "DB=%s, Payload=%s",
+                            tx.id,
+                            tx.amount,
+                            amt_int,
+                        )
+                        tx.notes = (
+                            "[ANOMALI WEBHOOK] Nominal tidak cocok: "
+                            f"DB={tx.amount}, Payload={amt_int}"
+                        )
+                        self.repo.update_transaction(tx)
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Nominal webhook tidak cocok dengan tagihan",
+                        )
+                except (ValueError, TypeError):
+                    pass
+
+            now_wib = datetime.now(WIB)
+            provider_state = canonical_status(status)
+            is_success = provider_state == STATUS_COMPLETED
+            is_failed = provider_state == STATUS_CANCELED
+
+            if is_success:
+                res = self._settle_successful_transaction(tx, gateway_payload=payload)
+                return {
+                    "success": True,
+                    "message": "Pembayaran berhasil diverifikasi",
+                    "status": res.get("status", "success"),
+                    "transaction_id": tx.id,
+                }
+            elif is_failed:
+                tx.status = (
+                    "cancelled"
+                    if status in ("canceled", "cancelled", "batal")
+                    else "failed"
+                )
+                tx.provider_status = status
+                tx.failure_reason = payload.get("failure_reason") or f"Status: {status}"
+                tx.updated_at = now_wib
+                self.repo.update_transaction(tx)
+                return {"success": True, "status": tx.status, "transaction_id": tx.id}
+
             return {
                 "success": True,
-                "message": "Pembayaran berhasil diverifikasi",
-                "status": res.get("status", "success"),
+                "message": f"Webhook diterima dengan status: {status}",
                 "transaction_id": tx.id,
             }
-        elif is_failed:
-            tx.status = (
-                "cancelled"
-                if status in ("canceled", "cancelled", "batal")
-                else "failed"
-            )
-            tx.provider_status = status
-            tx.failure_reason = payload.get("failure_reason") or f"Status: {status}"
-            tx.updated_at = now_wib
-            self.repo.update_transaction(tx)
-            return {"success": True, "status": tx.status, "transaction_id": tx.id}
-
-        return {
-            "success": True,
-            "message": f"Webhook diterima dengan status: {status}",
-            "transaction_id": tx.id,
-        }
+        finally:
+            if r is not None and lock_acquired:
+                try:
+                    release_lua = """
+                    if redis.call("get", KEYS[1]) == ARGV[1] then
+                        return redis.call("del", KEYS[1])
+                    else
+                        return 0
+                    end
+                    """
+                    r.eval(release_lua, 1, lock_key, lock_token)
+                except Exception:
+                    pass
 
     def process_webhook(self, payload: dict, x_secret: str | None = None) -> dict:
         return self.process_pakkasir_webhook(payload, x_secret=x_secret)

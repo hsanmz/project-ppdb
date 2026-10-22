@@ -20,6 +20,7 @@ POST /whatsapp/disconnect    — logout & reset sesi
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 from urllib.parse import urlparse
 
@@ -29,6 +30,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.core.config import settings
+from src.core.database import execute_raw
 from src.core.dependencies import require_superadmin
 
 logger = logging.getLogger("ptdarrahman.whatsapp")
@@ -424,9 +426,24 @@ async def whatsapp_test(
 async def whatsapp_queue(
     user: dict[str, Any] = Depends(require_superadmin),
 ) -> JSONResponse:
-    """Statistik antrean pesan dari BullMQ."""
-    resp = await _proxy_json("GET", "/api/messages/queue", timeout=6.0)
-    return _json_response(resp)
+    """Statistik antrean pesan dari BullMQ (graceful fallback saat offline)."""
+    try:
+        resp = await _proxy_json("GET", "/api/messages/queue", timeout=4.0)
+        return _json_response(resp)
+    except Exception:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "data": {
+                    "waiting": 0,
+                    "active": 0,
+                    "completed": 0,
+                    "failed": 0,
+                    "delayed": 0,
+                },
+            },
+        )
 
 
 @router.get("/logs")
@@ -437,14 +454,83 @@ async def whatsapp_logs(
     eventKey: str | None = Query(None),
     user: dict[str, Any] = Depends(require_superadmin),
 ) -> JSONResponse:
-    """Log pengiriman pesan WA (paginated)."""
-    params: dict[str, Any] = {"page": page, "perPage": perPage}
+    """Log pengiriman pesan WA (paginated).
+
+    Coba microservice dahulu, fallback ke MySQL.
+    """
+    try:
+        params: dict[str, Any] = {"page": page, "perPage": perPage}
+        if status:
+            params["status"] = status
+        if eventKey:
+            params["eventKey"] = eventKey
+        resp = await _proxy_json(
+            "GET", "/api/messages/logs", params=params, timeout=4.0
+        )
+        if resp.status_code == 200:
+            return _json_response(resp)
+    except Exception:
+        pass
+
+    # Fallback ke tabel MySQL notification_logs
+    where_clauses = [
+        "(channel = 'whatsapp' OR channel = 'both' OR recipient_phone IS NOT NULL)"
+    ]
+    params_dict: dict[str, Any] = {}
     if status:
-        params["status"] = status
+        where_clauses.append("status = :status")
+        params_dict["status"] = status
     if eventKey:
-        params["eventKey"] = eventKey
-    resp = await _proxy_json("GET", "/api/messages/logs", params=params, timeout=8.0)
-    return _json_response(resp)
+        where_clauses.append("event_key = :eventKey")
+        params_dict["eventKey"] = eventKey
+    where_sql = f"WHERE {' AND '.join(where_clauses)}"
+
+    count_rows = execute_raw(
+        f"SELECT COUNT(id) AS total FROM notification_logs {where_sql}", params_dict
+    )
+    total = int(count_rows[0]["total"]) if count_rows else 0
+
+    offset = (page - 1) * perPage
+    data_sql = (
+        f"SELECT * FROM notification_logs {where_sql} "
+        f"ORDER BY created_at DESC LIMIT {perPage} OFFSET {offset}"
+    )
+    rows = execute_raw(data_sql, params_dict) or []
+
+    data = [
+        {
+            "id": r.get("id"),
+            "event_key": r.get("event_key") or "custom",
+            "recipient_name": r.get("recipient_name") or "—",
+            "recipient_phone": r.get("recipient_phone") or "—",
+            "channel": r.get("channel") or "whatsapp",
+            "body_sent": r.get("body_sent") or "",
+            "status": r.get("status") or "queued",
+            "retry_count": r.get("retry_count") or 0,
+            "error_message": r.get("error_message"),
+            "wa_message_id": r.get("wa_message_id"),
+            "created_at": r.get("created_at").isoformat()
+            if hasattr(r.get("created_at"), "isoformat")
+            else str(r.get("created_at")),
+            "sent_at": r.get("sent_at").isoformat()
+            if hasattr(r.get("sent_at"), "isoformat")
+            else (str(r.get("sent_at")) if r.get("sent_at") else None),
+        }
+        for r in rows
+    ]
+
+    total_pages = max(1, math.ceil(total / perPage)) if perPage else 1
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "data": data,
+            "total": total,
+            "page": page,
+            "perPage": perPage,
+            "totalPages": total_pages,
+        },
+    )
 
 
 @router.post("/template-cache/clear")

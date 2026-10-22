@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from src.core.database import get_db
+from src.core.database import audit_log, get_db
 from src.core.dependencies import require_superadmin
 from src.modules.roles.schemas import RoleCreate, RoleUpdate
 from src.repositories.roles_repository import RolesRepository
@@ -41,7 +41,16 @@ def create_role(
     service: RolesService = Depends(get_roles_service),
 ):
     data = body.model_dump(exclude_unset=True)
-    return service.create_role(data)
+    res = service.create_role(data)
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="create",
+        entity_type="roles",
+        entity_id=res.get("id"),
+        changes={"name": res.get("name")},
+    )
+    return res
 
 
 @router.put("/{id}")
@@ -52,7 +61,16 @@ def update_role(
     service: RolesService = Depends(get_roles_service),
 ):
     data = body.model_dump(exclude_unset=True)
-    return service.update_role(id, data)
+    res = service.update_role(id, data)
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="update",
+        entity_type="roles",
+        entity_id=id,
+        changes=data,
+    )
+    return res
 
 
 @router.delete("/{id}")
@@ -62,4 +80,11 @@ def delete_role(
     service: RolesService = Depends(get_roles_service),
 ):
     service.delete_role(id)
+    audit_log(
+        user_id=user.get("id"),
+        user_username=user.get("username"),
+        action="delete",
+        entity_type="roles",
+        entity_id=id,
+    )
     return {"message": "Deleted"}

@@ -1,5 +1,5 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth, useFilteredNav } from '../contexts/AuthContext'
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { useAuth, useFilteredNav, usePermission, normalizeNavKey } from '../contexts/AuthContext'
 import {
   LayoutDashboard, CalendarDays, CreditCard, Bell, Users, Archive, Settings, ClipboardCheck, Award, CalendarCheck, FileCheck2
 } from 'lucide-react'
@@ -70,11 +70,17 @@ const RouterDashboardLink: DashboardLinkComponent = ({ href, target, title, clas
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
+  const { canAccessPage, isSuperadmin } = usePermission()
   const navigate = useNavigate()
   const location = useLocation()
   const { logoUrl, faviconUrl } = useBrand(API_BASE)
 
   const filtered = useFilteredNav(navItems as unknown as Parameters<typeof useFilteredNav>[0]) as NavItem[]
+
+  const pageKey = normalizeNavKey(location.pathname)
+  if (!isSuperadmin && pageKey && pageKey !== 'dashboard' && pageKey !== 'profile' && !canAccessPage(pageKey)) {
+    return <Navigate to="/admin/dashboard" replace />
+  }
 
   async function handleLogout() {
     await logout()
@@ -117,8 +123,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }}
       navGroups={navGroups}
       renderLink={RouterDashboardLink}
-      title="Admin PPDB"
-      subtitle={user?.role_name || user?.user_type}
+      onNavigate={(item) => {
+        if (item.href) navigate(item.href)
+      }}
+      apiBase={API_BASE}
       roleLabel={user?.role_name || user?.user_type}
       contentClassName="animate-fade-in"
       storageKey="ppdb_collapsed"

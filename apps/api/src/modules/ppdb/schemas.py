@@ -44,6 +44,33 @@ class TIUSettingsUpdate(BaseModel):
         return value.strip()
 
 
+class TIUVerificationRequest(BaseModel):
+    google_form_url: str | None = None
+    duration_minutes: int | None = None
+    webhook_secret: str | None = None
+
+
+class TIUCheckItem(BaseModel):
+    key: str
+    status: str
+    label: str
+    detail: str
+    fix: str | None = None
+
+
+class TIUVerificationSummary(BaseModel):
+    passed: int
+    failed: int
+    warn: int
+
+
+class TIUVerificationResponse(BaseModel):
+    overall: str
+    checks: list[TIUCheckItem]
+    summary: TIUVerificationSummary
+    recommendations: list[str]
+
+
 class TIUQuestionInput(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -591,6 +618,68 @@ class ApplicantAdminUpdate(BaseModel):
     status: str | None = None
     payment_status: str | None = None
     rejection_reason: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def check_phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v.isdigit():
+            raise ValueError("Nomor HP/WhatsApp hanya boleh angka")
+        if not (9 <= len(v) <= 16):
+            raise ValueError("Nomor HP/WhatsApp harus 9-16 digit angka")
+        return v
+
+    @field_validator("nisn")
+    @classmethod
+    def check_nisn(cls, v: str | None) -> str | None:
+        return _digits_or_none(v, 10, "NISN")
+
+    @field_validator("nik")
+    @classmethod
+    def check_nik(cls, v: str | None) -> str | None:
+        return _digits_or_none(v, 16, "NIK")
+
+    @field_validator("postal_code")
+    @classmethod
+    def check_postal_code(cls, v: str | None) -> str | None:
+        return _digits_or_none(v, 5, "Kode pos")
+
+
+class ApplicantProfileUpdate(BaseModel):
+    """Pembaruan data formulir mandiri oleh pendaftar dari halaman profil."""
+
+    full_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=16)
+    gender: str | None = None
+    birth_place: str | None = Field(default=None, max_length=100)
+    birth_date: date | None = None
+    nisn: str | None = None
+    nik: str | None = None
+    previous_school: str | None = Field(default=None, max_length=150)
+
+    # Orang tua / wali
+    parent_name: str | None = Field(default=None, max_length=150)
+    father_name: str | None = Field(default=None, max_length=150)
+    father_job: str | None = Field(default=None, max_length=100)
+    father_phone: str | None = Field(default=None, max_length=20)
+    mother_name: str | None = Field(default=None, max_length=150)
+    mother_job: str | None = Field(default=None, max_length=100)
+    mother_phone: str | None = Field(default=None, max_length=20)
+    guardian_name: str | None = Field(default=None, max_length=150)
+    guardian_job: str | None = Field(default=None, max_length=100)
+    parent_phone: str | None = Field(default=None, max_length=20)
+    parent_income: str | None = Field(default=None, max_length=100)
+    parent_email: str | None = Field(default=None, max_length=100)
+
+    # Domisili
+    province: str | None = Field(default=None, max_length=100)
+    city: str | None = Field(default=None, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
+    village: str | None = Field(default=None, max_length=100)
+    postal_code: str | None = Field(default=None, max_length=5)
+    address: str | None = Field(default=None, max_length=500)
 
     @field_validator("phone")
     @classmethod

@@ -1,6 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import ApplicantLoAModal from '@/components/shared/ApplicantLoAModal'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiFetch } from '@/api/client'
+import { useToast } from '@/components/Toast'
+import DigitalSignaturePad, { type DigitalSignaturePadRef } from '@/components/shared/DigitalSignaturePad'
 import {
   CheckCircle,
   X,
@@ -16,8 +19,12 @@ import {
   Award,
   Calculator,
   Info,
+  ExternalLink,
+  Send,
+  ShieldAlert,
+  FileText,
 } from 'lucide-react'
-import { Badge, Button, Card, CardContent } from '@/components/ui'
+import { Badge, Button, Card, CardContent, Input, Label } from '@/components/ui'
 
 interface CriterionItem {
   criteria_name: string
@@ -41,9 +48,73 @@ interface LoaResultStepProps {
 
 export default function LoaResultStep({ applicant, selectionResult, loa }: LoaResultStepProps) {
   const navigate = useNavigate()
-  const [showLoaModal, setShowLoaModal] = useState(false)
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+  const sigPadRef = useRef<DigitalSignaturePadRef | null>(null)
 
   const isLoaSigned = Boolean(loa?.is_loa_signed || applicant?.is_loa_signed)
+
+  // In-page Digital Signing Form States
+  const [signerName, setSignerName] = useState(
+    loa?.loa_signer_name || loa?.applicant?.parent_name || applicant?.parent_name || ''
+  )
+  const [signerRelation, setSignerRelation] = useState<'Ayah' | 'Ibu' | 'Wali'>('Ayah')
+  const [agreeTerms, setAgreeTerms] = useState(false)
+  const [signatureData, setSignatureData] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!signerName && (loa?.applicant?.parent_name || applicant?.parent_name)) {
+      setSignerName(loa?.applicant?.parent_name || applicant?.parent_name || '')
+    }
+  }, [loa?.applicant?.parent_name, applicant?.parent_name, signerName])
+
+  const signMutation = useMutation({
+    mutationFn: async () => {
+      return await apiFetch('/ppdb/applicants/me/sign-loa', {
+        method: 'POST',
+        body: JSON.stringify({
+          signer_name: signerName.trim(),
+          signer_relation: signerRelation,
+          signature_data: signatureData,
+        }),
+      })
+    },
+    onSuccess: () => {
+      toast('success', 'Letter of Acceptance (LoA) berhasil ditandatangani secara digital!')
+      queryClient.invalidateQueries({ queryKey: ['my-loa'] })
+      queryClient.invalidateQueries({ queryKey: ['my-transaction'] })
+      queryClient.invalidateQueries({ queryKey: ['applicant-status'] })
+      queryClient.invalidateQueries({ queryKey: ['applicant-me'] })
+      queryClient.invalidateQueries({ queryKey: ['signed-loa-applicants'] })
+    },
+    onError: (e: any) => {
+      toast('error', e?.message || 'Gagal menandatangani LoA')
+    },
+  })
+
+  const handleSignSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!signerName.trim()) {
+      toast('error', 'Nama lengkap orang tua / wali penandatangan wajib diisi')
+      return
+    }
+    const sig = sigPadRef.current?.getDataUrl() || signatureData
+    if (!sig) {
+      toast('error', 'Mohon bubuhkan tanda tangan digital pada kotak yang disediakan')
+      return
+    }
+    if (!agreeTerms) {
+      toast('error', 'Anda wajib menyetujui klausul ketentuan resmi PPDB')
+      return
+    }
+    setSignatureData(sig)
+    signMutation.mutate()
+  }
+
+  const loaRegistrationNo = loa?.registration_number || applicant?.registration_number || applicant?.id
+  const handleOpenLoaPage = () => {
+    navigate(`/loa/${loaRegistrationNo}`)
+  }
 
   // Parse & structure categories, weights, and scores cleanly
   const { tiuScore, totalScore, tahfidzCategory, wawancaraCategory, otherCategories } = useMemo(() => {
@@ -161,7 +232,7 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
         </div>
         <h3 className="text-lg sm:text-xl font-bold text-red-800 mb-2 font-heading">Mohon Maaf, Anda Dinyatakan Tidak Lulus</h3>
         <p className="text-red-700 text-sm max-w-md mx-auto leading-relaxed">
-          Terima kasih telah berpartisipasi dalam proses seleksi PPDB Pesantren Tahfidz Qur'an dan Digital Ar-Rahman. Tetap semangat dalam menuntut ilmu di mana pun Anda berada.
+          Terima kasih telah berpartisipasi dalam proses seleksi PPDB Pesantren Tahfidz Qur'an dan Digital Arrahman. Tetap semangat dalam menuntut ilmu di mana pun Anda berada.
         </p>
       </div>
     )
@@ -203,7 +274,7 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
                 Selamat! Anda Dinyatakan LULUS Seleksi Santri Baru
               </h3>
               <p className="text-slate-600 text-xs sm:text-sm mt-1 leading-relaxed max-w-2xl">
-                Alhamdulillah, ananda <strong>{applicant?.full_name || 'Calon Santri'}</strong> telah menyelesaikan seluruh tahapan seleksi PPDB Pesantren Tahfidz Qur'an dan Digital Ar-Rahman dan memenuhi kriteria kelulusan.
+                Alhamdulillah, ananda <strong>{applicant?.full_name || 'Calon Santri'}</strong> telah menyelesaikan seluruh tahapan seleksi PPDB Pesantren Tahfidz Qur'an dan Digital Arrahman dan memenuhi kriteria kelulusan.
               </p>
             </div>
           </div>
@@ -562,57 +633,172 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
         </div>
       )}
 
-      {/* 4. LoA Section */}
+      {/* 4. LoA Section & In-page Signing */}
       <div className="border border-emerald-200 rounded-2xl bg-white overflow-hidden shadow-sm">
-        <div className="bg-emerald-50/70 p-4 sm:p-5 border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-emerald-50/70 p-3.5 sm:p-5 border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <FileSignature className="w-5 h-5 text-emerald-700 shrink-0" />
             <div className="min-w-0 flex-1">
-              <h4 className="font-semibold text-emerald-950 text-base">Dokumen Letter of Acceptance (LoA)</h4>
+              <h4 className="font-semibold text-emerald-950 text-sm sm:text-base">Dokumen Letter of Acceptance (LoA)</h4>
               <p className="text-xs text-emerald-700 truncate">Surat Resmi Penerimaan Santri Baru & Persetujuan Orang Tua/Wali</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             {isLoaSigned ? (
               <Badge variant="success" className="gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 border-emerald-300">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Sudah Ditandatangani
               </Badge>
             ) : (
-              <Badge variant="warning" className="gap-1 px-2.5 py-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border-amber-300">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Wajib Ditandatangani
+              <Badge variant="warning" className="gap-1 px-2.5 py-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border-amber-300 whitespace-nowrap">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Wajib TTD
               </Badge>
             )}
             <Button
-              onClick={() => setShowLoaModal(true)}
-              className="w-full sm:w-auto h-9 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white shrink-0 font-semibold text-xs cursor-pointer"
+              type="button"
+              onClick={handleOpenLoaPage}
+              className="h-8 sm:h-9 px-3 gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white shrink-0 font-semibold text-xs cursor-pointer shadow-2xs"
             >
-              <FileSignature className="w-4 h-4" />
-              {isLoaSigned ? 'Buka / Cetak LoA' : 'Buka & Tanda Tangani LoA'}
+              <FileText className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Buka & Review Dokumen LoA</span>
+              <span className="sm:hidden">Review LoA</span>
+              <ExternalLink className="w-3 h-3 opacity-80" />
             </Button>
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 space-y-4">
+        <div className="p-3.5 sm:p-5 space-y-3.5 sm:space-y-4">
           {!isLoaSigned ? (
-            <div className="p-4 sm:p-5 bg-amber-50/95 border-2 border-amber-300 rounded-xl text-amber-950 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-              <div className="flex items-start gap-3">
-                <PenTool className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold text-amber-950 text-sm">
-                    Konfirmasi Dua Pihak: Tanda Tangan Digital Orang Tua / Wali di Aplikasi
+            <div className="space-y-3 sm:space-y-4">
+              {/* Alert Peringatan Tanda Tangan */}
+              <div className="p-3 sm:p-4 bg-amber-50/90 border border-amber-300 rounded-xl text-amber-950 text-xs flex items-start gap-2.5 shadow-2xs">
+                <PenTool className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-amber-950 text-xs sm:text-sm">
+                    Konfirmasi Tanda Tangan Digital Orang Tua / Wali
                   </p>
-                  <p className="text-amber-900 leading-relaxed text-xs">
-                    Calon santri yang dinyatakan lulus wajib melakukan konfirmasi dengan cara membubuhkan <strong>Tanda Tangan Digital Orang Tua / Wali secara langsung di aplikasi ini</strong> sebelum pembayaran Uang Muka (DP) dapat dilakukan. Tanda tangan dan nama orang tua/wali akan otomatis tercantum pada dokumen Letter of Acceptance (LoA).
+                  <p className="text-amber-900 leading-relaxed text-[11px] sm:text-xs mt-0.5">
+                    Silakan isi identitas dan bubuhkan tanda tangan di bawah ini untuk mengesahkan LoA sebelum lanjut ke pembayaran Uang Muka (DP).
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={() => setShowLoaModal(true)}
-                className="w-full sm:w-auto h-10 px-4 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shrink-0 shadow-xs cursor-pointer"
-              >
-                <PenTool className="w-4 h-4" />
-                Tanda Tangani LoA di Aplikasi
-              </Button>
+
+              {/* FORM TANDA TANGAN DIGITAL LANGSUNG DI HALAMAN (IN-PAGE) */}
+              <Card className="border border-emerald-200 bg-white shadow-xs rounded-xl sm:rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white p-3 sm:p-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-1.5 bg-emerald-800/80 text-emerald-200 rounded-lg shrink-0">
+                      <PenTool className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-xs sm:text-sm text-white truncate">
+                        Formulir Tanda Tangan Digital
+                      </h4>
+                      <p className="text-[11px] text-emerald-200 truncate hidden sm:block">
+                        Bubuhkan tanda tangan sah untuk mengesahkan Letter of Acceptance.
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-800/90 border-emerald-700 text-emerald-100 text-[10px] uppercase font-bold shrink-0">
+                    Langkah Wajib
+                  </Badge>
+                </div>
+
+                <CardContent className="p-3.5 sm:p-5 space-y-3 sm:space-y-4">
+                  <form onSubmit={handleSignSubmit} className="space-y-3.5 sm:space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      {/* Nama Penandatangan */}
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-slate-800">
+                          Nama Lengkap Orang Tua / Wali <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          value={signerName}
+                          onChange={(e) => setSignerName(e.target.value)}
+                          placeholder="Contoh: H. Ahmad Subagio, S.T."
+                          required
+                          className="text-xs h-9 sm:h-10 rounded-lg sm:rounded-xl border-slate-200 focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {/* Hubungan */}
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-slate-800">
+                          Hubungan dengan Santri <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-0.5">
+                          {(['Ayah', 'Ibu', 'Wali'] as const).map((rel) => (
+                            <label
+                              key={rel}
+                              className={`flex items-center justify-center py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                                signerRelation === rel
+                                  ? 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold shadow-2xs'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="signer_relation"
+                                value={rel}
+                                checked={signerRelation === rel}
+                                onChange={() => setSignerRelation(rel)}
+                                className="text-emerald-600 focus:ring-emerald-500 sr-only"
+                              />
+                              <span>{rel}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Canvas Tanda Tangan */}
+                    <div className="space-y-1 pt-0.5">
+                      <DigitalSignaturePad
+                        ref={sigPadRef}
+                        onSignatureChange={(url) => setSignatureData(url)}
+                        className="w-full"
+                      />
+                      <p className="text-[11px] text-slate-400">
+                        Goreskan tanda tangan menggunakan jari atau stylus. Di ponsel, layar terkunci saat menggores.
+                      </p>
+                    </div>
+
+                    {/* Klausul Persetujuan Checkbox */}
+                    <div className="p-3 sm:p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                        <ShieldAlert className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                        <span>Klausul Non-Refundable PPDB</span>
+                      </div>
+                      <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700 leading-relaxed">
+                        <input
+                          type="checkbox"
+                          checked={agreeTerms}
+                          onChange={(e) => setAgreeTerms(e.target.checked)}
+                          className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 shrink-0 cursor-pointer"
+                          required
+                        />
+                        <span className="text-[11px] text-slate-700 leading-snug">
+                          Saya menyatakan data yang diisi adalah benar, telah membaca seluruh isi LoA, dan menyetujui bahwa{' '}
+                          <strong className="text-slate-900 font-semibold underline">
+                            seluruh dana yang telah dibayarkan tidak dapat dikembalikan dengan alasan apapun (non-refundable)
+                          </strong>.
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Submit Button */}
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="submit"
+                        disabled={signMutation.isPending}
+                        className="w-full sm:w-auto h-10 sm:h-11 px-4 sm:px-6 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md cursor-pointer whitespace-nowrap"
+                      >
+                        <Send className="h-4 w-4 shrink-0" />
+                        <span>{signMutation.isPending ? 'Menyimpan TTD...' : 'Simpan Tanda Tangan LoA'}</span>
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
             </div>
           ) : (
             <div className="p-4 sm:p-5 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
@@ -622,30 +808,36 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
                 </div>
                 <div>
                   <p className="font-semibold text-emerald-950 text-sm">Dokumen LoA Sah dan Terverifikasi</p>
-                  <p className="text-xs text-emerald-700 mt-0.5">Tanda tangan orang tua/wali telah berhasil direkam secara digital ke dalam dokumen resmi.</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Telah ditandatangani digital oleh orang tua/wali ({loa?.loa_signer_name || applicant?.loa_signer_name || 'Orang Tua / Wali'}) pada {loa?.loa_signed_at ? new Date(loa.loa_signed_at).toLocaleString('id-ID') : 'Sistem PPDB'}.
+                  </p>
                 </div>
               </div>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setShowLoaModal(true)}
-                className="gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 text-xs font-semibold cursor-pointer"
+                onClick={handleOpenLoaPage}
+                className="gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 text-xs font-semibold cursor-pointer shadow-2xs"
               >
-                <FileSignature className="w-3.5 h-3.5" />
-                Pratinjau / Download LoA
+                <FileText className="w-3.5 h-3.5" />
+                <span>Buka / Review LoA</span>
+                <ExternalLink className="w-3 h-3 opacity-70" />
               </Button>
             </div>
           )}
 
-          <div className="p-3.5 sm:p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-900">Klausul Resmi PPDB:</p>
-              <p className="mt-0.5 font-medium text-slate-800 italic">
-                "Seluruh dana yang telah dibayarkan tidak dapat dikembalikan."
-              </p>
+          {isLoaSigned && (
+            <div className="p-3 sm:p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs sm:text-sm flex items-start gap-2.5 sm:gap-3">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-slate-900 text-xs sm:text-sm">Klausul Resmi PPDB:</p>
+                <p className="mt-0.5 font-medium text-slate-700 italic text-[11px] sm:text-xs">
+                  "Seluruh dana yang telah dibayarkan tidak dapat dikembalikan."
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -669,6 +861,7 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
             </div>
           </div>
           <Button
+            type="button"
             onClick={() => navigate('/applicant/bayar-dp')}
             className="w-full md:w-auto h-11 px-5 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shrink-0 cursor-pointer shadow-md hover:scale-102 transition-transform"
           >
@@ -679,17 +872,9 @@ export default function LoaResultStep({ applicant, selectionResult, loa }: LoaRe
       ) : (
         <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Tahap berikutnya (Bayar DP & Sertifikat) akan terbuka setelah Anda menandatangani dokumen LoA di atas.</span>
+          <span>Tahap berikutnya (Bayar DP & Sertifikat) akan terbuka setelah Anda menandatangani formulir tanda tangan LoA di atas.</span>
         </div>
       )}
-
-      {/* LoA Modal */}
-      <ApplicantLoAModal
-        open={showLoaModal}
-        onOpenChange={setShowLoaModal}
-        applicantId={applicant?.id}
-        isApplicantPortal={true}
-      />
     </div>
   )
 }

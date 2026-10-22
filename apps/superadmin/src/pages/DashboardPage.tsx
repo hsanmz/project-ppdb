@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Shield, GraduationCap, Bell, Send, Activity, ChevronRight,
-  UserRound, Settings, CreditCard, Waves, CalendarRange, Filter, type LucideIcon,
+  UserRound, Settings, CreditCard, Waves, CalendarRange, Filter,
+  AlertTriangle, RotateCw, type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import * as api from '../api/client'
@@ -349,6 +350,9 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const [data, setData] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  // Error load stats yang tampil sebagai banner — jangan pernah menyamar
+  // jadi angka 0 seolah backend bilang "tidak ada data".
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [periods, setPeriods] = useState<ApplicantPeriod[]>([])
   const [waves, setWaves] = useState<ApplicantWave[]>([])
   const [periodFilter, setPeriodFilter] = useState(ALL)
@@ -366,6 +370,7 @@ export default function DashboardPage() {
     api
       .getDashboardStats(params)
       .then((res: any) => {
+        setLoadError(null)
         if (res?.stats) {
           setData(res)
         } else {
@@ -385,7 +390,11 @@ export default function DashboardPage() {
           })
         }
       })
-      .catch(() => {})
+      .catch((e) => {
+        // Pertahankan data lama bila ada; tanpa data, banner error tampil
+        // menggantikan kartu statistik angka 0 yang menyesatkan.
+        setLoadError(api.getErrorMessage(e, 'Gagal memuat statistik dashboard.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -584,6 +593,25 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fadeIn pb-8">
+      {/* Gagal memuat statistik — tampil sebagai banner, bukan angka 0 */}
+      {loadError && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+          <div className="flex-1 text-sm text-red-800">
+            <p className="font-semibold">Gagal Memuat Statistik Dashboard</p>
+            <p className="mt-0.5 text-xs text-red-700">
+              {loadError} Angka di bawah mungkin tidak mutakhir.
+            </p>
+          </div>
+          <button
+            onClick={() => load(periodFilter, waveFilter)}
+            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-red-300 px-4 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 sm:self-auto"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Muat Ulang
+          </button>
+        </div>
+      )}
+
       {/* Hero card: sapaan + status sistem */}
       {loading ? (
         <Skeleton className="h-48 w-full rounded-3xl" />

@@ -1,0 +1,75 @@
+# ============================================================
+# PTDARRAHMAN — PRODUCTION EDGE (nginx + static UI)
+# ============================================================
+# Build context: repository ROOT (./)
+#
+# Image ini adalah gerbang tunggal production:
+#   - Menyajikan 2 SPA statis (hasil `vite build`, BUKAN `vite preview`):
+#       * ppdb        → /usr/share/nginx/html/ppdb
+#       * superadmin  → /usr/share/nginx/html/superadmin
+#   - Mem-proxy ke container lain (nama service Docker):
+#       * companyprofile:3000 (Next.js)  → subdomain company profile
+#       * api:8000           (FastAPI)   → subdomain API
+#   - TLS (Let's Encrypt) & routing per subdomain di-generate saat start
+#     oleh docker/nginx/30-generate-sites.sh dari env DOMAIN_*.
+#
+# URL API di-bake ke bundle client saat build (VITE_API_URL). Karena itu
+# build arg HARUS berisi URL publik API yang sebenarnya.
+# ============================================================
+
+ARG NODE_VERSION=22
+
+# ── Stage: builder — build 2 SPA statis ──────────────────────────────────────
+FROM node:${NODE_VERSION}-slim AS builder
+ENV PNPM_HOME="/pnpm"
+ENV PATH="${PNPM_HOME}:${PATH}"
+RUN corepack enable && corepack prepare pnpm@9.10.0 --activate
+
+WORKDIR /workspace
+
+# Cache tarball dari lockfile lebih dulu supaya layer install stabil & cepat.
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm fetch --fetch-retries=8 --network-concurrency=4
+
+COPY package.json turbo.json ./
+
+# Seluruh workspace disalin SEBELUM `pnpm install` (pnpm menautkan paket
+# lintas-workspace; menyalin source sesudah install merusak symlink node_modules).
+# apps/companyprofile disalin walau tidak di-build di sini agar lockfile
+# frozen tetap punya seluruh importer.
+COPY packages/ ./packages/
+COPY apps/ppdb/ ./apps/ppdb/
+COPY apps/superadmin/ ./apps/superadmin/
+COPY apps/companyprofile/ ./apps/companyprofile/
+
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --offline --frozen-lockfile --fetch-retries=8 --network-concurrency=4
+
+# URL yang di-bake ke bundle client. HARUS URL publik (https) di produksi.
+ARG VITE_API_URL=""
+ARG VITE_COMPANY_PROFILE_URL=""
+ARG VITE_MOCK_AUTH="false"
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_COMPANY_PROFILE_URL=${VITE_COMPANY_PROFILE_URL}
+ENV VITE_MOCK_AUTH=${VITE_MOCK_AUTH}
+
+RUN pnpm --filter ppdb build && pnpm --filter superadmin build
+
+# ── Stage: runtime — nginx edge ──────────────────────────────────────────────
+FROM nginx:1.27-alpine AS runtime
+
+RUN apk add --no-cache tzdata
+
+# Generator konfigurasi (dijalankan otomatis oleh entrypoint nginx).
+COPY docker/nginx/30-generate-sites.sh /docker-entrypoint.d/30-generate-sites.sh
+COPY docker/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+RUN chmod +x /docker-entrypoint.d/30-generate-sites.sh
+
+# Artefak statis hasil build.
+COPY --from=builder /workspace/apps/ppdb/dist /usr/share/nginx/html/ppdb
+COPY --from=builder /workspace/apps/superadmin/dist /usr/share/nginx/html/superadmin
+
+EXPOSE 80 443
+
+# CMD default image nginx: `nginx -g "daemon off;"`.

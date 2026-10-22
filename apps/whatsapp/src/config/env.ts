@@ -5,7 +5,8 @@
  * Fails fast at startup if required variables are missing or invalid.
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -68,6 +69,30 @@ function parseEnv() {
       },
       {
         message: "WEBHOOK_SECRET must be at least 32 characters when WEBHOOK_URL is set",
+        path: ["WEBHOOK_SECRET"],
+      }
+    )
+    .refine(
+      (data) => {
+        if (data.NODE_ENV === "production") {
+          return data.API_KEY !== "change-me-to-a-random-secret-at-least-32-chars";
+        }
+        return true;
+      },
+      {
+        message: "Do not use default placeholder as API_KEY in production. Set a random 32+ character secret in .env",
+        path: ["API_KEY"],
+      }
+    )
+    .refine(
+      (data) => {
+        if (data.NODE_ENV === "production" && data.WEBHOOK_URL) {
+          return data.WEBHOOK_SECRET !== "change-me-to-a-random-webhook-secret-min-32-chars";
+        }
+        return true;
+      },
+      {
+        message: "Do not use default placeholder as WEBHOOK_SECRET in production. Set a random 32+ character secret in .env",
         path: ["WEBHOOK_SECRET"],
       }
     )

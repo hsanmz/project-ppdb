@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Copy, Loader2, Smartphone, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui'
-import { waCancelPairing, waGetQrSseUrl, waRequestPairingCode } from '@/api/client'
+import { waCancelPairing, waGetQrSseUrl, waRequestPairingCode, getErrorMessage } from '@/api/client'
 
 export default function PhonePanel({
   existingCode,
@@ -42,7 +42,7 @@ export default function PhonePanel({
       }
       onRefresh()
     } catch (err) {
-      setError((err as Error).message)
+      setError(getErrorMessage(err, 'Gagal membuat pairing code.'))
     } finally {
       setLoading(false)
     }
@@ -56,7 +56,7 @@ export default function PhonePanel({
       setCode(null)
       onRefresh()
     } catch (err) {
-      setError((err as Error).message)
+      setError(getErrorMessage(err, 'Gagal membatalkan pairing code.'))
     } finally {
       setLoading(false)
     }

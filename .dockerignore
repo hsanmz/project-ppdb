@@ -24,6 +24,17 @@ dist
 *.tsbuildinfo
 *.log
 
+# Nested build artifacts — context root dipakai oleh Dockerfile.web &
+# Dockerfile.companyprofile. Tanpa pola `**/` ini, node_modules/dist/.next
+# milik host (hasil `pnpm dev`/`pnpm build`) ikut terkirim ke context build.
+**/node_modules
+**/.pnpm-store
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
 # Backend & WhatsApp service — TIDAK diperlukan oleh container frontend
 apps/api
 apps/whatsapp
@@ -35,6 +46,17 @@ __pycache__
 *.pyc
 .mypy_cache
 .ruff_cache
+
+# Nested Python artifacts
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
 
 # Docker config sendiri
 Dockerfile

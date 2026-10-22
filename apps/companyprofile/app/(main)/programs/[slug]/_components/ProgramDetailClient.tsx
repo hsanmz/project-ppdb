@@ -7,6 +7,8 @@ import { useScrollReveal } from '@/app/hooks/useScrollAnimations'
 import type { Program } from '@/app/lib/types'
 import type { ProgramMenuLink } from '@/app/lib/programs'
 import { Clock, Layers, Check, BookOpen, Cpu, Globe, Award, ArrowRight } from 'lucide-react'
+import { resolvePortalUrl } from '@repo/ui'
+
 
 const iconMap: Record<string, typeof BookOpen> = {
   'book-quran': BookOpen,
@@ -264,6 +266,14 @@ export default function ProgramDetailClient({ program, others = [] }: Props) {
                     </Link>
                   </div>
                 )}
+                <Link href={resolvePortalUrl(process.env.NEXT_PUBLIC_PORTAL_URL)} className="btn-primary w-full justify-center">
+                  Daftar Sekarang
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link href="/contact" className="btn-ghost w-full justify-center">
+                  Ajukan Pertanyaan
+                </Link>
+
               </div>
             </div>
           </div>

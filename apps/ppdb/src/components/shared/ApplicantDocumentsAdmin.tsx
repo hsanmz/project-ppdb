@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui'
 import { Checkbox } from '@/components/ui'
 import { FileText, Download, CheckCircle, XCircle, AlertTriangle, ArrowRight } from 'lucide-react'
 import { useToast } from '@/components/Toast'
+import { useCanPage } from '@/hooks/useCan'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui'
 import { Textarea } from '@/components/ui'
 
@@ -41,6 +42,7 @@ export default function ApplicantDocumentsAdmin({
   onVerified,
 }: ApplicantDocumentsAdminProps) {
   const { toast } = useToast()
+  const { canCrud } = useCanPage('verifikasi-dokumen')
   const queryClient = useQueryClient()
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -204,7 +206,7 @@ export default function ApplicantDocumentsAdmin({
                         <Download className="h-3.5 w-3.5 mr-1" /> Unduh
                       </a>
                     </Button>
-                    {!isVerified && (
+                    {!isVerified && canCrud && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -223,7 +225,7 @@ export default function ApplicantDocumentsAdmin({
       )}
 
       {/* Action Footer: Approve Semua atau Reject Dokumen Spesifik */}
-      {!isVerified && docs.length > 0 && (
+      {!isVerified && canCrud && docs.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t mt-4">
           <Button
             className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"

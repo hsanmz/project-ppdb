@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, UserCheck, UserX, UserRound, Users } from 'lucide-react'
+import { Plus, Search, UserCheck, UserX, UserRound, Users } from 'lucide-react'
 import PageHero from '../components/PageHero'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import * as api from '../api/client'
-import { useToast } from '../components/Toast'
-import { ConfirmDialog } from "../components/ui/confirmdialog"
 import type { User } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from "@/components/ui"
@@ -15,15 +13,13 @@ import { Badge } from "@/components/ui"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui"
 import { Skeleton } from "@/components/ui"
 import { EmptyState } from "@/components/ui"
+import { ErrorState } from "@/components/ui"
 
 export default function UsersPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
   const { user: currentUser, loading: authLoading } = useAuth()
-  const queryClient = useQueryClient()
 
   const canCrud = currentUser?.user_type === 'superadmin' || !!currentUser?.is_superadmin
   const canView = currentUser?.user_type === 'superadmin' || !!currentUser?.is_superadmin
@@ -31,10 +27,6 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const perPage = 20
-  const [deleting, setDeleting] = useState<string | null>(null)
-
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmData, setConfirmData] = useState<{ title: string; message: string; variant?: 'danger' | 'primary'; onConfirm: () => void } | null>(null)
 
   useEffect(() => {
     if (!authLoading && currentUser && !canView) {
@@ -42,7 +34,13 @@ export default function UsersPage() {
     }
   }, [currentUser, authLoading, canView, navigate])
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
+  const {
+    data: usersData,
+    isLoading: usersLoading,
+    isError: usersError,
+    error: usersErr,
+    refetch: refetchUsers,
+  } = useQuery({
     queryKey: ['users', search, page],
     queryFn: async () => {
       const res = await api.getUsers({ search: search || undefined, page, per_page: perPage })
@@ -70,24 +68,10 @@ export default function UsersPage() {
     }
   }, [page, totalPages])
 
-  const { data: roles = [] } = useQuery({
+  const { data: roles = [], isError: rolesError } = useQuery({
     queryKey: ['roles'],
     queryFn: api.getRoles,
     enabled: !!canView && !authLoading,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: api.deleteUser,
-    onSuccess: () => {
-      toast('success', 'User berhasil dihapus')
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-    },
-    onError: (e: any) => {
-      toast('error', e.message || 'Gagal menghapus')
-    },
-    onSettled: () => {
-      setDeleting(null)
-    }
   })
 
   // Debounce search
@@ -96,22 +80,6 @@ export default function UsersPage() {
     const timer = setTimeout(() => { setSearch(searchInput); setPage(1) }, 300)
     return () => clearTimeout(timer)
   }, [searchInput])
-
-  async function handleDelete(user: User) {
-    if (!canCrud) return
-    if (user.user_type === 'superadmin') return
-    setConfirmData({
-      title: 'Hapus User',
-      message: `Yakin ingin menghapus user "${user.username}"?`,
-      variant: 'danger',
-      onConfirm: async () => {
-        setConfirmOpen(false)
-        setDeleting(user.id)
-        deleteMutation.mutate(user.id)
-      },
-    })
-    setConfirmOpen(true)
-  }
 
   function getRoleName(roleId: string) {
     const role = roles.find(r => r.id === roleId)
@@ -128,15 +96,6 @@ export default function UsersPage() {
 
   return (
     <>
-      <ConfirmDialog
-        isOpen={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        onConfirm={() => confirmData?.onConfirm()}
-        title={confirmData?.title || 'Konfirmasi'}
-        message={confirmData?.message || ''}
-        variant={confirmData?.variant}
-        confirmLabel="Ya, hapus"
-      />
       <div className="space-y-6 animate-fadeIn">
       <PageHero
         eyebrow="Manajemen Akses"
@@ -169,6 +128,13 @@ export default function UsersPage() {
         />
       </div>
 
+      {/* Query gagal: tampil sebagai error, BUKAN EmptyState "Belum Ada User" */}
+      {rolesError && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          Nama role tidak dapat dimuat — kolom Role akan tampil "—" sampai reload berhasil.
+        </p>
+      )}
+
       {/* Table */}
       {usersLoading ? (
         <Card className="p-6">
@@ -183,6 +149,12 @@ export default function UsersPage() {
             ))}
           </div>
         </Card>
+      ) : usersError ? (
+        <ErrorState
+          status={api.isApiError(usersErr) ? usersErr.status : 500}
+          retry={() => refetchUsers()}
+          fullscreen={false}
+        />
       ) : users.length === 0 ? (
         <EmptyState
           icon={UserRound}
@@ -208,20 +180,17 @@ export default function UsersPage() {
                     <TableHead>Full Name</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
-                    {canCrud && <TableHead className="text-right">Aksi</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map((user: any) => (
-                    <TableRow key={user.id}>
+                    <TableRow
+                      key={user.id}
+                      onClick={() => navigate(`/users/${user.id}`)}
+                      className="cursor-pointer"
+                    >
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8 text-xs">
-                            <AvatarImage src={user.avatar_url || undefined} alt={user.username} />
-                            <AvatarFallback className="bg-primary/10 font-bold text-primary">
-                              {(user.full_name || user.username)?.[0]?.toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
                           {user.username}
                           {user.user_type === 'superadmin' && (
                             <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">SA</Badge>
@@ -243,29 +212,6 @@ export default function UsersPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      {canCrud && (
-                        <TableCell className="text-right whitespace-nowrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate(`/users/${user.id}`)}
-                            className="mr-2"
-                          >
-                            <Edit /> Edit
-                          </Button>
-                          {user.user_type !== 'superadmin' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => handleDelete(user)}
-                              disabled={deleting === user.id}
-                            >
-                              <Trash2 /> Hapus
-                            </Button>
-                          )}
-                        </TableCell>
-                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -276,14 +222,12 @@ export default function UsersPage() {
           {/* Mobile Cards */}
           <div className="md:hidden space-y-3">
             {users.map((user: any) => (
-              <Card key={user.id} className="space-y-3 p-5 shadow-sm">
+              <Card
+                key={user.id}
+                onClick={() => navigate(`/users/${user.id}`)}
+                className="cursor-pointer space-y-3 p-5 shadow-sm"
+              >
                 <div className="flex items-center gap-2.5">
-                  <Avatar className="h-9 w-9 text-sm">
-                    <AvatarImage src={user.avatar_url || undefined} alt={user.username} />
-                    <AvatarFallback className="bg-primary/10 font-bold text-primary">
-                      {(user.full_name || user.username)?.[0]?.toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 text-sm font-bold text-foreground">
                       {user.username}
@@ -323,28 +267,6 @@ export default function UsersPage() {
                     </div>
                   </div>
                 </div>
-
-                {canCrud && (
-                  <div className="flex gap-2 border-t border-border pt-3">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => navigate(`/users/${user.id}`)}
-                    >
-                      <Edit /> Edit
-                    </Button>
-                    {user.user_type !== 'superadmin' && (
-                      <Button
-                        variant="outline"
-                        className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleDelete(user)}
-                        disabled={deleting === user.id}
-                      >
-                        <Trash2 /> Hapus
-                      </Button>
-                    )}
-                  </div>
-                )}
               </Card>
             ))}
           </div>

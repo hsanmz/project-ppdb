@@ -60,6 +60,7 @@ export interface AdminUser {
   is_superadmin?: boolean
   permissions?: Record<string, string>
   page_permissions?: string[]
+  crud_permissions?: string[]
 }
 
 export function errorMessage(e: unknown, fallback = 'Terjadi kesalahan'): string {

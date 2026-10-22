@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import * as api from '../api/client'
 import type { ApplicantPeriod, ApplicantWave } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -9,6 +9,10 @@ import {
   Card,
   CardContent,
   ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
   EmptyState,
   Input,
   Modal,
@@ -26,20 +30,20 @@ import {
   GraduationCap,
   KeyRound,
   Pencil,
-  Plus,
   Search,
   Trash2,
+  UserRound,
   UserRoundSearch,
   Waves,
 } from 'lucide-react'
 import PageHero from '../components/PageHero'
 import { generateSecurePassword } from '../lib/password'
 import ApplicantForm from '../components/applicants/ApplicantForm'
+import ApplicantDetailView from '../components/applicants/ApplicantDetailView'
 import {
   APPLICANT_STATUSES,
   PAYMENT_STATUSES,
 } from '../lib/applicantOptions'
-import { HealthIdentificationViewer } from '../components/applicants/HealthIdentificationViewer'
 
 const ALL = '__all__'
 const perPage = 20
@@ -55,6 +59,32 @@ function statusLabel(status: string): string {
   return (
     APPLICANT_STATUSES.find((s) => s.value === status)?.label ??
     (status || '-').replace(/_/g, ' ')
+  )
+}
+
+function paymentVariant(status?: string) {
+  return status === 'paid'
+    ? 'success'
+    : status === 'expired'
+      ? 'destructive'
+      : 'warning'
+}
+
+/** Statistik ringkas pada header modal detail. */
+function HeaderStat({
+  label,
+  value,
+}: {
+  label: string
+  value: ReactNode
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-0.5 text-sm font-semibold text-foreground">{value}</div>
+    </div>
   )
 }
 
@@ -77,12 +107,8 @@ export default function ApplicantsPage() {
   const [selected, setSelected] = useState<any>(null)
   const [detail, setDetail] = useState<any>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-
-  const [formOpen, setFormOpen] = useState(false)
-  const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
-  const [editing, setEditing] = useState<any>(null)
+  const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [createdCreds, setCreatedCreds] = useState<any>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
@@ -124,7 +150,7 @@ export default function ApplicantsPage() {
         setApplicants(res?.data || [])
         setTotal(newestTotal)
       } catch (e: any) {
-        toast('error', e.message || 'Gagal memuat pendaftar')
+        toast('error', api.getErrorMessage(e, 'Gagal memuat pendaftar'))
       } finally {
         setLoading(false)
       }
@@ -167,49 +193,39 @@ export default function ApplicantsPage() {
   function openDetail(a: any) {
     setSelected(a)
     setDetail(a)
+    setIsEditing(false)
     setDetailLoading(true)
     api
       .getApplicant(a.id)
       .then((full: any) => setDetail(full))
-      .catch((e: any) => toast('error', e.message || 'Gagal memuat detail'))
+      .catch((e: any) => toast('error', api.getErrorMessage(e, 'Gagal memuat detail')))
       .finally(() => setDetailLoading(false))
   }
 
-  function openCreate() {
-    setFormMode('create')
-    setEditing(null)
-    setCreatedCreds(null)
-    setFormOpen(true)
-  }
-
-  function openEdit(a: any) {
-    setFormMode('edit')
-    setEditing(a)
-    setCreatedCreds(null)
-    setFormOpen(true)
+  function closeDetail() {
+    setSelected(null)
+    setDetail(null)
+    setIsEditing(false)
+    setDetailLoading(false)
   }
 
   async function handleFormSubmit(payload: Record<string, string>) {
+    if (!detail) return
     setSaving(true)
     try {
-      if (formMode === 'create') {
-        const res: any = await api.createApplicant(payload)
-        setCreatedCreds(res?.credentials || null)
-        toast('success', 'Pendaftar berhasil dibuat')
-        setFormOpen(false)
-        setSelected(null)
-        setDetail(null)
-        fetchApplicants(1)
+      const res: any = await api.updateApplicant(detail.id, payload)
+      toast('success', 'Data pendaftar diperbarui')
+      setIsEditing(false)
+      // Respons sudah membawa data terbaru; fallback ke ambil ulang bila tidak ada.
+      if (res?.applicant) {
+        setDetail(res.applicant)
       } else {
-        await api.updateApplicant(editing.id, payload)
-        toast('success', 'Data pendaftar diperbarui')
-        setFormOpen(false)
-        setSelected(null)
-        setDetail(null)
-        fetchApplicants()
+        const full: any = await api.getApplicant(detail.id)
+        setDetail(full)
       }
+      fetchApplicants()
     } catch (err: any) {
-      toast('error', err.message || 'Gagal menyimpan pendaftar')
+      toast('error', api.getErrorMessage(err, 'Gagal menyimpan pendaftar'))
     } finally {
       setSaving(false)
     }
@@ -222,12 +238,11 @@ export default function ApplicantsPage() {
       await api.deleteApplicant(deleteTarget.id)
       toast('success', 'Pendaftar & seluruh datanya dihapus permanen')
       setDeleteTarget(null)
-      setSelected(null)
-      setDetail(null)
+      closeDetail()
       if (applicants.length === 1 && page > 1) setPage(page - 1)
       fetchApplicants()
     } catch (err: any) {
-      toast('error', err.message || 'Gagal menghapus pendaftar')
+      toast('error', api.getErrorMessage(err, 'Gagal menghapus pendaftar'))
     } finally {
       setDeleting(false)
     }
@@ -261,7 +276,7 @@ export default function ApplicantsPage() {
         setResetOpen(false)
       }
     } catch (err: any) {
-      toast('error', err.message || 'Gagal mereset password')
+      toast('error', api.getErrorMessage(err, 'Gagal mereset password'))
     } finally {
       setResetting(false)
     }
@@ -272,7 +287,7 @@ export default function ApplicantsPage() {
       <PageHero
         eyebrow="PPDB"
         title="Data Pendaftar"
-        description="Seluruh pendaftar dari semua periode & gelombang. Filter bersifat opsional; tiap baris membawa label periode dan gelombang asalnya."
+        description="Seluruh pendaftar dari semua periode & gelombang. Klik baris mana pun untuk membuka detail sekaligus mengedit datanya."
         docKey="superadmin-applicants"
         loading={loading && applicants.length === 0}
         chips={[
@@ -286,12 +301,6 @@ export default function ApplicantsPage() {
             label: `${applicants.filter((a) => a.payment_status === 'paid').length} Lunas (halaman ini)`,
           },
         ]}
-        actions={
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" />
-            Tambah Pendaftar
-          </Button>
-        }
       />
 
       <Card>
@@ -363,26 +372,25 @@ export default function ApplicantsPage() {
                 <TableHead>Jalur Pendaftaran</TableHead>
                 <TableHead>Pembayaran</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={6} className="text-center py-8">
                     Memuat data...
                   </TableCell>
                 </TableRow>
               ) : applicants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8">
+                  <TableCell colSpan={6} className="py-8">
                     <EmptyState
                       icon={UserRoundSearch}
                       title={hasFilter ? 'Tidak Ada Pendaftar' : 'Belum Ada Pendaftar'}
                       description={
                         hasFilter
                           ? 'Tidak ada pendaftar yang cocok dengan filter atau kata kunci ini.'
-                          : 'Belum ada akun pendaftar. Data muncul otomatis saat calon siswa mendaftar, atau buat sendiri lewat tombol Tambah Pendaftar.'
+                          : 'Belum ada akun pendaftar. Data muncul otomatis saat calon santri mendaftar.'
                       }
                       className="bg-transparent border-transparent"
                     />
@@ -395,6 +403,7 @@ export default function ApplicantsPage() {
                     <TableRow
                       key={a.id}
                       className="hover:bg-muted/50 transition-colors cursor-pointer"
+                      title="Klik untuk melihat detail & mengedit"
                       onClick={() => openDetail(a)}
                     >
                       <TableCell className="font-medium">{a.full_name}</TableCell>
@@ -416,15 +425,7 @@ export default function ApplicantsPage() {
                         {a.registration_path || '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            a.payment_status === 'paid'
-                              ? 'success'
-                              : a.payment_status === 'expired'
-                                ? 'destructive'
-                                : 'warning'
-                          }
-                        >
+                        <Badge variant={paymentVariant(a.payment_status)}>
                           {(a.payment_status || 'pending').toUpperCase()}
                         </Badge>
                       </TableCell>
@@ -432,38 +433,6 @@ export default function ApplicantsPage() {
                         <span className="text-xs text-muted-foreground">
                           {statusLabel(a.status)}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div
-                          className="flex justify-end gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Edit"
-                            onClick={() => openEdit(a)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Reset password"
-                            onClick={() => openReset(a)}
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Hapus permanen"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget(a)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -505,273 +474,137 @@ export default function ApplicantsPage() {
         </CardContent>
       </Card>
 
-      {/* Detail */}
-      <Modal
-        isOpen={!!selected}
-        onClose={() => {
-          setSelected(null)
-          setDetail(null)
-        }}
-        title="Detail Pendaftar"
-        size="xl"
-        footer={
-          detail ? (
+      {/* Detail & Edit dalam satu modal */}
+      <Dialog open={!!selected} onOpenChange={(open) => !open && closeDetail()}>
+        <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+          {detail && (
             <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelected(null)
-                  openEdit(detail)
-                }}
-              >
-                <Pencil className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  setSelected(null)
-                  setDeleteTarget(detail)
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Hapus
-              </Button>
-            </>
-          ) : undefined
-        }
-      >
-        {detail && (
-          <div className="space-y-6">
-            {detailLoading && (
-              <p className="text-xs text-muted-foreground">Memuat data lengkap...</p>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Nama Lengkap</p>
-                <p className="font-medium">{detail.full_name}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Status Pembayaran</p>
-                <Badge
-                  className="mt-1"
-                  variant={
-                    detail.payment_status === 'paid'
-                      ? 'success'
-                      : detail.payment_status === 'expired'
-                        ? 'destructive'
-                        : 'warning'
-                  }
-                >
-                  {(detail.payment_status || 'pending').toUpperCase()}
-                </Badge>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Email</p>
-                <p className="font-medium">{detail.email}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">No. WhatsApp</p>
-                <p className="font-medium">{detail.phone}</p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Periode</p>
-                <p className="font-medium">{detail.period_name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Gelombang</p>
-                <p className="font-medium">{detail.wave_name || '-'}</p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Jalur Pendaftaran</p>
-                <p className="font-medium capitalize">
-                  {detail.registration_path || '-'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Tempat, Tgl Lahir</p>
-                <p className="font-medium">
-                  {detail.birth_place || '-'}, {detail.birth_date || '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Jenis Kelamin</p>
-                <p className="font-medium">
-                  {detail.gender === 'L'
-                    ? 'Laki-laki'
-                    : detail.gender === 'P'
-                      ? 'Perempuan'
-                      : '-'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">NISN</p>
-                <p className="font-medium">{detail.nisn || '-'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">NIK</p>
-                <p className="font-medium">{detail.nik || '-'}</p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Nama Orang Tua/Wali</p>
-                <p className="font-medium">{detail.parent_name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Asal Sekolah</p>
-                <p className="font-medium">{detail.previous_school || '-'}</p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground text-xs">Waktu Daftar</p>
-                <p className="font-medium">
-                  {detail.created_at
-                    ? new Date(detail.created_at).toLocaleString('id-ID')
-                    : '-'}
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-sm mb-2">Data Domisili</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                {(
-                  [
-                    ['Provinsi', detail.province],
-                    ['Kota/Kabupaten', detail.city],
-                    ['Kecamatan', detail.district],
-                    ['Kelurahan/Desa', detail.village],
-                    ['Kode Pos', detail.postal_code],
-                    ['Pilihan Jurusan', detail.major_choice],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label}>
-                    <p className="text-muted-foreground text-xs">{label}</p>
-                    <p className="font-medium">{value || '-'}</p>
+              {/* Header bergaya modal PPDB */}
+              <div className="border-b border-border bg-emerald-light/40 p-5 pr-12 sm:p-6 sm:pr-14">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-primary text-white shadow-sm">
+                    {isEditing ? (
+                      <Pencil className="h-5 w-5" />
+                    ) : (
+                      <UserRound className="h-5 w-5" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <DialogTitle className="truncate text-lg font-bold text-foreground">
+                      {isEditing
+                        ? 'Edit Data Pendaftar'
+                        : detail.full_name || 'Detail Pendaftar'}
+                    </DialogTitle>
+                    <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
+                      {isEditing
+                        ? 'Perbarui data pendaftar, lalu simpan perubahan.'
+                        : `No. Pendaftar: ${detail.id?.slice(0, 8) ?? '-'} · ${scopeLabel(detail).text} · ${scopeLabel(detail).muted}`}
+                    </DialogDescription>
                   </div>
-                ))}
-                <div className="col-span-2">
-                  <p className="text-muted-foreground text-xs">Alamat Detail</p>
-                  <p className="font-medium">{detail.address || '-'}</p>
                 </div>
-                <div className="col-span-2">
-                  <p className="text-muted-foreground text-xs mb-1.5 font-semibold">
-                    Profil Identifikasi Kesehatan (Pengganti Medcheck)
+
+                {!isEditing && (
+                  <div className="mt-4 grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-4">
+                    <HeaderStat
+                      label="Periode / Gelombang"
+                      value={
+                        <span className="text-xs sm:text-sm">
+                          {scopeLabel(detail).text} · {scopeLabel(detail).muted}
+                        </span>
+                      }
+                    />
+                    <HeaderStat
+                      label="Jalur Pendaftaran"
+                      value={
+                        <span className="text-xs capitalize sm:text-sm">
+                          {detail.registration_path || '-'}
+                        </span>
+                      }
+                    />
+                    <HeaderStat
+                      label="Status Pendaftaran"
+                      value={
+                        <Badge variant="secondary">
+                          {statusLabel(detail.status)}
+                        </Badge>
+                      }
+                    />
+                    <HeaderStat
+                      label="Status Pembayaran"
+                      value={
+                        <Badge variant={paymentVariant(detail.payment_status)}>
+                          {(detail.payment_status || 'pending').toUpperCase()}
+                        </Badge>
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+                {detailLoading && !isEditing && (
+                  <p className="text-xs text-muted-foreground">
+                    Memuat data lengkap...
                   </p>
-                  <HealthIdentificationViewer data={detail.disease_history} />
-                </div>
-              </div>
-            </div>
+                )}
 
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
-              <p className="text-xs font-semibold text-foreground mb-3">
-                Kredensial Login
-              </p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground text-xs">Username</p>
-                  <p className="font-mono font-medium">{detail.username || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">Password</p>
-                  <p className="font-mono font-medium text-muted-foreground">
-                    ••••••
-                  </p>
-                </div>
+                {isEditing ? (
+                  <ApplicantForm
+                    formId="applicant-edit-form"
+                    initial={detail}
+                    waves={waves}
+                    onSubmit={handleFormSubmit}
+                  />
+                ) : (
+                  <ApplicantDetailView
+                    detail={detail}
+                    onResetPassword={() => openReset(detail)}
+                  />
+                )}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={() => openReset(detail)}
-              >
-                <KeyRound className="h-4 w-4 mr-1" />
-                Reset Password (Generate)
-              </Button>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Password baru dibuat sistem lalu dikirim ke nomor WhatsApp pendaftar.
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
 
-      {/* Create / Edit */}
-      <Modal
-        isOpen={formOpen}
-        onClose={() => setFormOpen(false)}
-        title={formMode === 'create' ? 'Tambah Pendaftar' : 'Edit Pendaftar'}
-        size="lg"
-      >
-        <ApplicantForm
-          mode={formMode}
-          initial={editing}
-          waves={waves}
-          submitting={saving}
-          onSubmit={handleFormSubmit}
-          onCancel={() => setFormOpen(false)}
-          submitLabel={formMode === 'create' ? 'Buat Pendaftar' : 'Simpan Perubahan'}
-        />
-      </Modal>
-
-      {/* Kredensial hasil create — hanya ditampilkan sekali */}
-      <Modal
-        isOpen={!!createdCreds}
-        onClose={() => setCreatedCreds(null)}
-        title="Pendaftar Dibuat"
-        size="sm"
-        footer={
-          <Button className="w-full" onClick={() => setCreatedCreds(null)}>
-            Selesai
-          </Button>
-        }
-      >
-        {createdCreds && (
-          <div className="space-y-4">
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-success/30 bg-success/5 p-4 text-center">
-              <CheckCircle2 className="h-8 w-8 text-success" />
-              <p className="text-sm font-semibold text-foreground">
-                Data pendaftar tersimpan
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Kredensial di bawah hanya ditampilkan sekali dan kredensial ini juga
-                dikirim ke nomor WhatsApp pendaftar.
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-2">
-              <div>
-                <p className="text-muted-foreground text-xs">Username</p>
-                <p className="font-mono font-medium">{createdCreds.username}</p>
+              {/* Footer */}
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-4 sm:px-6">
+                {isEditing ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setIsEditing(false)}
+                      disabled={saving}
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="submit"
+                      form="applicant-edit-form"
+                      loading={saving}
+                    >
+                      Simpan Perubahan
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="mr-auto border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleteTarget(detail)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Hapus
+                    </Button>
+                    <Button onClick={() => setIsEditing(true)}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit Data
+                    </Button>
+                  </>
+                )}
               </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Password</p>
-                <p className="font-mono font-semibold text-primary">
-                  {createdCreds.password}
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                navigator.clipboard?.writeText(
-                  `Username: ${createdCreds.username}\nPassword: ${createdCreds.password}`
-                )
-                toast('success', 'Kredensial disalin')
-              }}
-            >
-              Salin Kredensial
-            </Button>
-          </div>
-        )}
-      </Modal>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Hapus permanen */}
       <ConfirmDialog
@@ -811,14 +644,7 @@ export default function ApplicantsPage() {
               </Button>
             </>
           ) : resetResult ? (
-            <Button
-              className="w-full"
-              onClick={() => {
-                setResetOpen(false)
-                setSelected(null)
-                setDetail(null)
-              }}
-            >
+            <Button className="w-full" onClick={() => setResetOpen(false)}>
               Selesai
             </Button>
           ) : undefined

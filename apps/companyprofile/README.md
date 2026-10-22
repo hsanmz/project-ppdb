@@ -17,9 +17,12 @@ Aplikasi **Company Profile** (website publik) dan **Portal Informasi** utama unt
 - 📰 `/about`, `/news`, `/news/[slug]` — Profil & berita pesantren
 - 🏆 `/programs`, `/programs/[slug]` — Program unggulan
 - 📸 `/facilities`, `/achievements`, `/gallery`, `/staff`, `/contact` — Informasi publik lainnya
-- 🎓 `/ppdb` — Halaman informasi PPDB interaktif dengan 3D Hero
+- 🎓 `/ppdb` — Halaman informasi PPDB interaktif dengan 3D Hero Globe
 - 🚪 `/auth/login` — Portal login terpusat (Pendaftar, Admin, & Superadmin)
 - ⚙️ `/admin/overview`, `/admin/dashboard` — CRUD dashboard konten web (Berita, Galeri, Fasilitas, Pengaturan, dll.)
+- 👤 `/admin/profile` — Pengaturan profil admin web, avatar editor, dan manajemen sesi login perangkat aktif
+
+> 🌍 **Catatan Teknis 3D Hero:** Detail arsitektur Three.js, penyesuaian aset GLB, dan optimasi performa globe dibahas di [**docs/HERO_3D_GLOBE.md**](../../docs/HERO_3D_GLOBE.md).
 
 ## 🛠️ Stack Teknologi
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ppdbService } from '@/services'
 import { useToast } from '@/components/Toast'
-import { useCan } from '@/hooks/useCan'
+import { useCanPage } from '@/hooks/useCan'
 import {
   Card, CardContent,
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
@@ -29,7 +29,7 @@ type PeriodFormData = z.infer<typeof periodSchema>
 
 export default function PeriodsPage() {
   const { toast } = useToast()
-  const { canCrud } = useCan('ppdb', 'crud')
+  const { canCrud } = useCanPage('periods')
   const queryClient = useQueryClient()
 
   const { data: periods = [], isLoading: loading } = useQuery({
@@ -260,7 +260,7 @@ export default function PeriodsPage() {
               {errors.description && <p className="text-xs text-red-500">{errors.description.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Link Grup WhatsApp (Opsional)</Label>
+              <Label>Link Grup WhatsApp</Label>
               <Input
                 {...register('wa_group_link')}
                 placeholder="https://chat.whatsapp.com/..."
@@ -269,17 +269,17 @@ export default function PeriodsPage() {
               {errors.wa_group_link && <p className="text-xs text-red-500">{errors.wa_group_link.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Nama Ketua Panitia PPDB (Opsional)</Label>
+              <Label>Nama Ketua Panitia PPDB</Label>
               <Input
                 {...register('head_of_committee')}
                 placeholder="Contoh: Ust. Wijaya Kurnia, M.Pd."
                 disabled={!canCrud || isSubmitting}
               />
-              <p className="text-[11px] text-muted-foreground">
-                Nama ini akan dicantumkan secara resmi pada tanda tangan Letter of Acceptance (LoA).
-              </p>
               {errors.head_of_committee && <p className="text-xs text-red-500">{errors.head_of_committee.message}</p>}
             </div>
+            <p className="text-[11px] text-muted-foreground leading-snug pt-2 border-t border-dashed">
+              Catatan: Nama ketua panitia akan dicantumkan secara resmi pada tanda tangan Letter of Acceptance (LoA).
+            </p>
             {canCrud && (
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={isSubmitting}>Batal</Button>
