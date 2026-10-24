@@ -1,14 +1,13 @@
 /**
- * Konten landing PPDB halaman `/ppdb` (copy hero 3D + seksi di bawah hero).
+ * Konten statis landing PPDB halaman `/ppdb` (copy hero 3D + seksi di bawah hero).
  *
- * Sumber utama data adalah CMS Company Profile (`GET /companyprofile/ppdb-*`)
- * sehingga panitia bisa mengubahnya lewat dashboard tanpa deploy. Konstanta di
- * file ini adalah *fallback* yang meniru seed migrasi CMS terbaru (0042 + kit
- * copywriting PTD Ar-Rahman pada 0045): halaman tetap utuh walau API/DB sedang
- * tidak terjangkau.
+ * Kartu Jalur Pendaftaran, Pilar Kurikulum, langkah Alur Pendaftaran, dan
+ * teks seksi/CTA TIDAK lagi dikelola dari CMS Company Profile — semuanya
+ * ditulis langsung di sini (mengikuti kit copywriting PTD Ar-Rahman yang
+ * semula disemai migrasi 0042 + 0045). Satu-satunya data yang tetap dinamis
+ * adalah gelombang PPDB aktif dari backend PPDB (`fetchActivePpdbWave`).
  */
 
-import { getPpdbCopy, getPpdbJalur, getPpdbPillars, getPpdbSteps } from './api'
 import type {
   PpdbCopyContent,
   PpdbJalurCard,
@@ -41,7 +40,7 @@ export const PPDB_ICON_NAMES = [
 
 export type PpdbIconName = (typeof PPDB_ICON_NAMES)[number]
 
-/** Cocokkan nama ikon dari CMS tanpa peduli huruf besar/kecil. */
+/** Cocokkan nama ikon tanpa peduli huruf besar/kecil. */
 export function resolveIconName(value: unknown): PpdbIconName {
   if (typeof value === 'string') {
     const wanted = value.trim().toLowerCase()
@@ -64,83 +63,9 @@ export function pickAccent(value: unknown): AccentKey {
   return 'emerald'
 }
 
-// ── Urutan & penggabungan ────────────────────────────────────────────────
+// ── Konten statis ────────────────────────────────────────────────────────
 
-function orderValue(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return null
-}
-
-/** Urutkan naik berdasarkan `content.order`; tanpa order → paling akhir, stabil. */
-export function sortByOrder<T>(items: T[], getOrder: (item: T) => unknown): T[] {
-  return items
-    .map((item, index) => ({ item, index, order: orderValue(getOrder(item)) }))
-    .sort((a, b) => {
-      const ao = a.order ?? Number.MAX_SAFE_INTEGER
-      const bo = b.order ?? Number.MAX_SAFE_INTEGER
-      if (ao !== bo) return ao - bo
-      return a.index - b.index
-    })
-    .map((entry) => entry.item)
-}
-
-/** Field kosong dari API tidak boleh menimpa teks default. */
-export function mergeCopy(row: PpdbCopyContent | null | undefined): PpdbCopyContent {
-  const merged: PpdbCopyContent = { ...DEFAULT_PPDB_COPY }
-  if (row) {
-    for (const key of Object.keys(DEFAULT_PPDB_COPY) as (keyof PpdbCopyContent)[]) {
-      const value = row[key]
-      if (typeof value === 'string' && value.trim() !== '') {
-        merged[key] = value
-      }
-    }
-  }
-  return merged
-}
-
-// ── Fetch ────────────────────────────────────────────────────────────────
-
-async function withFallback<T>(load: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await load()
-  } catch {
-    return fallback
-  }
-}
-
-/** Ambil seluruh konten landing PPDB; tidak pernah melempar (fallback ke default). */
-export async function fetchPpdbContent(): Promise<PpdbContent> {
-  const [jalur, pillars, steps, copyRow] = await Promise.all([
-    withFallback<PpdbJalurCard[]>(getPpdbJalur, []),
-    withFallback<PpdbPillar[]>(getPpdbPillars, []),
-    withFallback<PpdbStep[]>(getPpdbSteps, []),
-    withFallback(getPpdbCopy, null),
-  ])
-
-  return {
-    jalur:
-      jalur.length > 0
-        ? sortByOrder(jalur, (card) => card.content?.order)
-        : DEFAULT_PPDB_CONTENT.jalur,
-    pillars:
-      pillars.length > 0
-        ? sortByOrder(pillars, (item) => item.content?.order)
-        : DEFAULT_PPDB_CONTENT.pillars,
-    steps:
-      steps.length > 0
-        ? sortByOrder(steps, (item) => item.content?.order)
-        : DEFAULT_PPDB_CONTENT.steps,
-    copy: mergeCopy(copyRow?.content),
-  }
-}
-
-// ── Default (hero: teks bawaan komponen hero; seksi: seed migrasi 0042) ─
-
-export const DEFAULT_PPDB_COPY: PpdbCopyContent = {
+export const STATIC_PPDB_COPY: PpdbCopyContent = {
   hero_title: `Tempat Tumbuhnya Para Hafidz 30 Juz
 yang Menguasai Rekayasa Teknologi`,
   hero_desc:
@@ -167,9 +92,9 @@ yang Menguasai Rekayasa Teknologi`,
   cta_secondary_href: '/programs',
 }
 
-const DEFAULT_JALUR: PpdbJalurCard[] = [
+const STATIC_JALUR: PpdbJalurCard[] = [
   {
-    id: 'default-jalur-1',
+    id: 'static-jalur-1',
     icon: 'GraduationCap',
     content: {
       order: 1,
@@ -183,7 +108,7 @@ const DEFAULT_JALUR: PpdbJalurCard[] = [
     },
   },
   {
-    id: 'default-jalur-2',
+    id: 'static-jalur-2',
     icon: 'Award',
     content: {
       order: 2,
@@ -197,7 +122,7 @@ const DEFAULT_JALUR: PpdbJalurCard[] = [
     },
   },
   {
-    id: 'default-jalur-3',
+    id: 'static-jalur-3',
     icon: 'Laptop',
     content: {
       order: 3,
@@ -211,7 +136,7 @@ const DEFAULT_JALUR: PpdbJalurCard[] = [
     },
   },
   {
-    id: 'default-jalur-4',
+    id: 'static-jalur-4',
     icon: 'Users',
     content: {
       order: 4,
@@ -226,9 +151,9 @@ const DEFAULT_JALUR: PpdbJalurCard[] = [
   },
 ]
 
-const DEFAULT_PILLARS: PpdbPillar[] = [
+const STATIC_PILLARS: PpdbPillar[] = [
   {
-    id: 'default-pillar-1',
+    id: 'static-pillar-1',
     icon: 'BookOpen',
     content: {
       order: 1,
@@ -237,7 +162,7 @@ const DEFAULT_PILLARS: PpdbPillar[] = [
     },
   },
   {
-    id: 'default-pillar-2',
+    id: 'static-pillar-2',
     icon: 'Laptop',
     content: {
       order: 2,
@@ -246,7 +171,7 @@ const DEFAULT_PILLARS: PpdbPillar[] = [
     },
   },
   {
-    id: 'default-pillar-3',
+    id: 'static-pillar-3',
     icon: 'Users',
     content: {
       order: 3,
@@ -255,7 +180,7 @@ const DEFAULT_PILLARS: PpdbPillar[] = [
     },
   },
   {
-    id: 'default-pillar-4',
+    id: 'static-pillar-4',
     icon: 'ShieldCheck',
     content: {
       order: 4,
@@ -265,9 +190,9 @@ const DEFAULT_PILLARS: PpdbPillar[] = [
   },
 ]
 
-const DEFAULT_STEPS: PpdbStep[] = [
+const STATIC_STEPS: PpdbStep[] = [
   {
-    id: 'default-step-1',
+    id: 'static-step-1',
     content: {
       order: 1,
       title: 'Pendaftaran Online',
@@ -275,7 +200,7 @@ const DEFAULT_STEPS: PpdbStep[] = [
     },
   },
   {
-    id: 'default-step-2',
+    id: 'static-step-2',
     content: {
       order: 2,
       title: 'Verifikasi Berkas',
@@ -283,7 +208,7 @@ const DEFAULT_STEPS: PpdbStep[] = [
     },
   },
   {
-    id: 'default-step-3',
+    id: 'static-step-3',
     content: {
       order: 3,
       title: 'Ujian Seleksi & Tasmi',
@@ -291,7 +216,7 @@ const DEFAULT_STEPS: PpdbStep[] = [
     },
   },
   {
-    id: 'default-step-4',
+    id: 'static-step-4',
     content: {
       order: 4,
       title: 'Pengumuman & Daftar Ulang',
@@ -300,9 +225,9 @@ const DEFAULT_STEPS: PpdbStep[] = [
   },
 ]
 
-export const DEFAULT_PPDB_CONTENT: PpdbContent = {
-  jalur: DEFAULT_JALUR,
-  pillars: DEFAULT_PILLARS,
-  steps: DEFAULT_STEPS,
-  copy: DEFAULT_PPDB_COPY,
+export const STATIC_PPDB_CONTENT: PpdbContent = {
+  jalur: STATIC_JALUR,
+  pillars: STATIC_PILLARS,
+  steps: STATIC_STEPS,
+  copy: STATIC_PPDB_COPY,
 }

@@ -1,20 +1,33 @@
+import { looksLikeHtml, sanitizeRichHtml } from '@/app/lib/rich-text'
+
 interface Props {
   content: string
 }
 
 /**
- * Renders a plain-text article body as simple, self-generated HTML.
+ * Merender isi artikel.
  *
- * Catatan keamanan: SETIAP potongan yang berasal dari `content` melewati
- * `escapeHtml` di bawah, dan satu-satunya tag pada keluaran adalah tag statis
- * yang dibangun di file ini. Jadi hasilnya sudah aman untuk
- * `dangerouslySetInnerHTML` dan tidak perlu disanitasi lagi.
+ * Dua format didukung:
+ * - **HTML** (artikel baru dari editor WYSIWYG) — dibersihkan lewat
+ *   `sanitizeRichHtml` dengan daftar putih tag/atribut, jadi aman untuk
+ *   `dangerouslySetInnerHTML`.
+ * - **Teks polos** (artikel lama) — dirender seperti sebelumnya: paragraf,
+ *   daftar `- ` / `1. `, baris berakhiran `:` jadi subjudul, serta `**tebal**`,
+ *   `*miring*`, dan `` `kode` ``.
  *
- * Sengaja TIDAK memakai DOMPurify: `dompurify` membutuhkan DOM dan
- * `sanitize`-nya bukan sebuah fungsi saat SSR, sehingga render server halaman
- * detail berita gagal dan Next turun ke client rendering.
+ * Sanitizer murni string (tanpa DOM), jadi tetap berjalan saat SSR dan halaman
+ * detail berita tidak perlu turun ke client rendering.
  */
 export default function RichContent({ content }: Props) {
+  if (looksLikeHtml(content)) {
+    return (
+      <div
+        className="rich-content"
+        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
+      />
+    )
+  }
+
   const html = (content || '')
     .split('\n\n')
     .map((block) => {

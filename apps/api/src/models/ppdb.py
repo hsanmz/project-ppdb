@@ -46,8 +46,6 @@ class PPDBWave(Base):
     allowed_paths: Mapped[str] = mapped_column(
         String(50), default="reguler,prestasi,tahfidz,rapot"
     )
-    start_date: Mapped[date | None] = mapped_column(Date)
-    end_date: Mapped[date | None] = mapped_column(Date)
     registration_start_date: Mapped[date | None] = mapped_column(Date)
     registration_end_date: Mapped[date | None] = mapped_column(Date)
     quota: Mapped[int] = mapped_column(Integer, default=0)
@@ -131,24 +129,6 @@ class PPDBApplicant(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
-class TIUResult(Base):
-    """Idempotent server record of the automatically graded TIU result."""
-
-    __tablename__ = "tiu_results"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    applicant_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("ppdb_applicants.id", ondelete="CASCADE"), unique=True
-    )
-    attempt_id: Mapped[str | None] = mapped_column(String(64), unique=True)
-    idempotency_key: Mapped[str] = mapped_column(
-        String(200), unique=True, nullable=False
-    )
-    score: Mapped[float] = mapped_column(Float, nullable=False)
-    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
 class FileUpload(Base):
     __tablename__ = "file_uploads"
 
@@ -166,13 +146,6 @@ class FileUpload(Base):
     entity_id: Mapped[str | None] = mapped_column(String(50))
     data: Mapped[bytes | None] = mapped_column(LargeBinary(length=16777215))
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
-class RateLimit(Base):
-    __tablename__ = "rate_limits"
-
-    key: Mapped[str] = mapped_column(String(255), primary_key=True)
-    timestamp: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

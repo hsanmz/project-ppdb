@@ -12,6 +12,18 @@ const cspConnectSrc = [
   "https:",
 ].join(" ");
 
+// Origin API juga menyajikan `/uploads/...` (UPLOAD_PROVIDER=local|db). Di dev
+// origin itu `http://localhost:8000`, sehingga pratinjau gambar di modal admin
+// akan diblokir CSP kalau hanya `https:` yang diizinkan untuk `img-src`.
+const cspImageSrc = [
+  "'self'",
+  "data:",
+  "blob:",
+  "https:",
+  ...(apiOrigin ? [apiOrigin] : []),
+  ...(apiOrigin.includes("localhost") ? [] : ["http://localhost:8000"]),
+].join(" ");
+
 // Host gambar untuk `next/image`.
 //
 // Selain CDN sendiri, backend juga menyajikan berkas unggahan: dengan
@@ -85,7 +97,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-          { key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src ${cspConnectSrc} blob:; frame-src 'self' https://www.youtube.com https://www.google.com https://maps.google.com; media-src 'self' data: blob: https:; object-src 'none'; base-uri 'self'; form-action 'self'` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src ${cspImageSrc}; font-src 'self' data: https:; connect-src ${cspConnectSrc} blob:; frame-src 'self' https://www.youtube.com https://www.google.com https://maps.google.com; media-src 'self' data: blob: https:; object-src 'none'; base-uri 'self'; form-action 'self'` },
         ],
       },
     ];

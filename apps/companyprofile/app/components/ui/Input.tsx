@@ -14,7 +14,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const handleChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
       const raw = event.currentTarget.value
       let value = raw
-      if (type === 'tel' || inputMode === 'numeric') value = raw.replace(/\D/g, '')
+      // `tel`: izinkan format internasional (+62), pemisah spasi/tanda hubung,
+      // titik, dan tanda kurung — buang hanya karakter yang tak masuk akal
+      // untuk nomor telepon (huruf, <, dsb.) supaya tautan tel: tetap valid.
+      // `inputMode: "numeric"` (kolom Urutan, dsb.) tetap menyaring digit saja.
+      if (inputMode === 'numeric') value = raw.replace(/\D/g, '')
+      else if (type === 'tel') value = raw.replace(/[^\d+()\-. ]/g, '')
       else if (type === 'number' || inputMode === 'decimal') {
         const decimal = inputMode === 'decimal' || step === 'any' || (typeof step === 'string' && step.includes('.')) || (typeof step === 'number' && !Number.isInteger(step))
         const negative = min !== undefined && Number(min) < 0

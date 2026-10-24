@@ -22,7 +22,7 @@ Main public website + admin dashboard for Pesantren Tahfidz Qur'an dan Digital A
 - **Admin (`app/admin/`)**:
   - `/admin/login` — Redirect shim ke `/auth/login`
   - `/admin/overview` — Dashboard overview page (stats + per-section links into `/admin/dashboard`).
-  - `/admin/dashboard` — Main CRUD dashboard (15 tabs, supports deep-link `?tab=...`). Tab `hero` mengelola slide hero beranda (`hero-slides`). Grup `PPDB` (jalur/pillars/steps/copy) memakai entitas generik yang sama; `ppdb-copy` singleton (tanpa tombol Buat Baru/Hapus).
+  - `/admin/dashboard` — Main CRUD dashboard (11 tabs, supports deep-link `?tab=...`). Tab `hero` mengelola slide hero beranda (`hero-slides`). Konten halaman `/ppdb` (jalur/pillars/steps/copy) **tidak lagi dikelola dari CMS** — migrasi `0047` menghapus entitas & tabelnya; konten itu kini statis di `app/lib/ppdbContent.ts`.
   - `/admin/profile` — Profile page for website admin (uses `@repo/ui/profile` with avatar editor, change password, and active device sessions).
   - `/admin` — Redirects to `/admin/overview` if `admin_user` exists in localStorage, else `/auth/login`.
 

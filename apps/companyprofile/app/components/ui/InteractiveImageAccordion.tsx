@@ -92,7 +92,7 @@ export default function InteractiveImageAccordion({
           {active.title}
         </h3>
         {active.description && (
-          <p className="mt-3 text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed">
+          <p className="mt-3 text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
             {active.description}
           </p>
         )}

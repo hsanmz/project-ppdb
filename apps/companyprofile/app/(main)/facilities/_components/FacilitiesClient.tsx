@@ -1,21 +1,54 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import PageHeader from '@/app/components/layout/PageHeader'
 import { useScrollReveal } from '@/app/hooks/useScrollAnimations'
 import type { Facility } from '@/app/lib/types'
 import { Play } from 'lucide-react'
 import InteractiveImageAccordion from '@/app/components/ui/InteractiveImageAccordion'
 import EmptyState from '@/app/components/ui/EmptyState'
+import {
+  FACILITY_CATEGORY_OPTIONS,
+  facilityCategoryKey,
+  facilityCategoryLabel,
+} from '@/app/lib/facility-categories'
 
-const categories = [
-  { key: 'all', idn: 'Semua' },
-  { key: 'academic', idn: 'Akademik' },
-  { key: 'worship', idn: 'Ibadah' },
-  { key: 'sports', idn: 'Olahraga' },
-  { key: 'boarding', idn: 'Asrama' },
-  { key: 'tech', idn: 'Teknologi' },
-]
+interface FilterOption {
+  key: string
+  label: string
+}
+
+/**
+ * Filter dibangun dari data yang benar-benar ada, bukan daftar statis.
+ *
+ * Dengan begitu fasilitas berkategori baru (atau nilai lama seperti `tech`)
+ * tetap bisa difilter: kunci alias dipetakan ke kunci standar lewat
+ * `facilityCategoryKey`, lalu labelnya diambil dari konfigurasi kategori.
+ */
+function buildFilterOptions(facilities: Facility[]): FilterOption[] {
+  const present = new Set<string>()
+  const labelByKey = new Map<string, string>()
+
+  for (const facility of facilities) {
+    const key = facilityCategoryKey(facility.category)
+    if (!key) continue
+    present.add(key)
+    if (!labelByKey.has(key)) {
+      labelByKey.set(key, facilityCategoryLabel(facility.category) || key)
+    }
+  }
+
+  const standard = FACILITY_CATEGORY_OPTIONS.filter((option) => present.has(option.value)).map(
+    (option) => ({ key: option.value, label: option.label }),
+  )
+
+  const standardKeys = new Set(standard.map((option) => option.key))
+  const custom = [...present]
+    .filter((key) => !standardKeys.has(key))
+    .map((key) => ({ key, label: labelByKey.get(key) ?? key }))
+
+  return [{ key: 'all', label: 'Semua' }, ...standard, ...custom]
+}
 
 export default function FacilitiesClient({ facilities }: { facilities: Facility[] }) {
   const [filter, setFilter] = useState('all')
@@ -27,7 +60,15 @@ export default function FacilitiesClient({ facilities }: { facilities: Facility[
 
   useScrollReveal(sectionRef, { start: 'top 80%', stagger: 0.08 })
 
-  const filtered = filter === 'all' ? facilities : facilities.filter((f) => f.category === filter)
+  const categories = useMemo(() => buildFilterOptions(facilities), [facilities])
+
+  // Filter terpilih bisa hilang saat data berubah (mis. SSE); jatuh kembali ke
+  // "Semua" supaya halaman tidak menampilkan daftar kosong tanpa alasan.
+  const activeFilter = categories.some((cat) => cat.key === filter) ? filter : 'all'
+  const filtered =
+    activeFilter === 'all'
+      ? facilities
+      : facilities.filter((f) => facilityCategoryKey(f.category) === activeFilter)
 
   return (
     <>
@@ -46,14 +87,14 @@ export default function FacilitiesClient({ facilities }: { facilities: Facility[
                 key={cat.key}
                 onClick={() => setFilter(cat.key)}
                 className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-                  filter === cat.key
+                  activeFilter === cat.key
                     ? 'bg-[var(--accent)] text-white shadow-md'
                     : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--color-border)] hover:text-[var(--accent)]'
                 }`}
-                aria-label={`Filter ${cat.idn}`}
-                aria-pressed={filter === cat.key}
+                aria-label={`Filter ${cat.label}`}
+                aria-pressed={activeFilter === cat.key}
               >
-                {cat.idn}
+                {cat.label}
               </button>
             ))}
           </div>
@@ -62,7 +103,7 @@ export default function FacilitiesClient({ facilities }: { facilities: Facility[
           <div className="mb-16">
             {filtered.length > 0 ? (
               <InteractiveImageAccordion
-                key={filter}
+                key={activeFilter}
                 items={filtered.map((f) => ({
                   id: f.id,
                   title: f.content?.name ?? 'Fasilitas',

@@ -1,7 +1,7 @@
 """Kolom urutan tampil untuk tabel `programs`.
 
 Revision ID: 0044
-Revises: 0043
+Revises: 0043, 0043b (merge dua cabang paralel)
 Create Date: 2026-10-17
 
 Sebelumnya tabel ``programs`` tidak punya kolom urutan dan endpoint daftar
@@ -24,7 +24,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0044"
-down_revision: str | None = "0043"
+# Node merge: menyatukan cabang paralel 0043 (page CRUD permissions) dan
+# 0043b (hero slides) yang keduanya keluar dari 0041 lewat 0042 / 0042b.
+down_revision: str | Sequence[str] | None = ("0043", "0043b")
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

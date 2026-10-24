@@ -61,7 +61,6 @@ handleSave()
       - required→ kosong → tandai kolom + fokus + stop
  3. Tentukan apakah kirim kolom `image`
       - social  → tidak
-      - ppdb-*  → tidak (tab tanpa kolom image di backend; mengirim `image` = 422)
       - lainnya → ya (boleh kosong → "")
  4. news: payload.gallery = JSON.stringify(array URL)
  5. Tab punya `content`: payload.content = JSON.stringify(buildContent())
@@ -163,11 +162,11 @@ Tidak seragam, mengikuti skema tabel masing-masing entitas:
 | Sumber | Entitas | Diurutkan oleh | Form |
 |--------|---------|----------------|------|
 | Kolom `order` di DB | `hero-slides`, `programs`, `testimonials` | Backend — `ORDER BY order ASC` saat list endpoint | Kolom tabel → seksi **Informasi Utama** |
-| JSON `content.order` | `staff`, `ppdb-jalur`, `ppdb-pillars`, `ppdb-steps` | Klien — backend tidak bisa (`ORDER BY` kolom JSON tidak portabel), tabel dashboard mengurutkan sendiri lewat `sortRowsByOrder()` | Kolom konten → seksi **Detail Konten** |
+| JSON `content.order` | `staff` | Klien — backend tidak bisa (`ORDER BY` kolom JSON tidak portabel), tabel dashboard mengurutkan sendiri lewat `sortRowsByOrder()` | Kolom konten → seksi **Detail Konten** |
 
 Konsekuensi praktis:
-- Entitas berkolom `order`: nilai dikirim sebagai kolom tabel. Mengirim `order` ke entitas PPDB justru **ditolak 422** (tidak ada kolom itu di whitelist).
-- Entitas berbasis `content`: tabel `ppdb_*` dan `staff` memang tidak punya kolom `order` di DB, jadi nilainya hidup di dalam JSON `content`.
+- Entitas berkolom `order`: nilai dikirim sebagai kolom tabel.
+- Entitas berbasis `content`: tabel `staff` memang tidak punya kolom `order` di DB, jadi nilainya hidup di dalam JSON `content`.
 - Sumber ini dideklarasikan sekali di `ORDER_SOURCE` (`_constants.ts`) supaya frontend dan dokumentasi tidak berbeda pendapat.
 
 ### 4.1 `hero` — Hero Beranda (`/hero-slides`)
@@ -279,64 +278,7 @@ Konsekuensi praktis:
 
 > Tab `social` **tidak punya** seksi Detail Konten maupun Gambar Utama, dan field `image` tidak pernah dikirim.
 
-### 4.10 `ppdb-jalur` — Jalur PPDB (`/ppdb-jalur`)
-
-| Seksi | Kolom | Tipe | Simpan ke | Catatan |
-|-------|-------|------|-----------|---------|
-| Detail Konten | Judul Jalur | text | `content.title` | |
-| Detail Konten | Label Kecil (badge) | text | `content.kicker` | |
-| Detail Konten | Deskripsi | textarea | `content.desc` | |
-| Detail Konten | Poin Keunggulan (1 per baris) | list | `content.items` | |
-| Detail Konten | Warna Aksen | text | `content.accent` | Pilihan: `emerald` / `amber` / `sky` / `violet` / `rose` / `teal` |
-| Detail Konten | Label Tombol | text | `content.cta_label` | |
-| Detail Konten | Tautan Tombol | text | `content.cta_href` | |
-| Detail Konten | Urutan Tampilan | number | `content.order` | |
-| Informasi Utama | Ikon | text | `icon` | Nama ikon lucide, mis. `Award`, `GraduationCap`, `Target` |
-
-### 4.11 `ppdb-pillars` — Pilar Kurikulum (`/ppdb-pillars`)
-
-| Seksi | Kolom | Tipe | Simpan ke | Catatan |
-|-------|-------|------|-----------|---------|
-| Detail Konten | Judul Pilar | text | `content.title` | |
-| Detail Konten | Deskripsi | textarea | `content.desc` | |
-| Detail Konten | Urutan Tampilan | number | `content.order` | |
-| Informasi Utama | Ikon | text | `icon` | Mis. `BookOpen`, `Laptop`, `Globe` |
-
-### 4.12 `ppdb-steps` — Alur PPDB (`/ppdb-steps`)
-
-| Seksi | Kolom | Tipe | Simpan ke | Catatan |
-|-------|-------|------|-----------|---------|
-| Detail Konten | Judul Langkah | text | `content.title` | |
-| Detail Konten | Deskripsi | textarea | `content.desc` | |
-| Detail Konten | Urutan Tampilan | number | `content.order` | |
-
-> Tab ini tidak punya kolom tabel (Informasi Utama kosong) dan tidak punya kolom image.
-
-### 4.13 `ppdb-copy` — Teks & CTA PPDB (`/ppdb-copy`) — **Singleton**
-
-| Seksi | Kolom | Tipe | Simpan ke | Keterään |
-|-------|-------|------|-----------|----------|
-| Detail Konten | Judul Hero | textarea | `content.hero_title` | Enter = baris baru; baris terakhir diberi warna aksen |
-| Detail Konten | Deskripsi Hero | textarea | `content.hero_desc` | |
-| Detail Konten | Label Tombol Hero | text | `content.hero_cta_label` | |
-| Detail Konten | Tautan Tombol Hero | text | `content.hero_cta_href` | |
-| Detail Konten | Label Tombol Header | text | `content.hero_register_label` | Tombol di header halaman PPDB |
-| Detail Konten | Tautan Tombol Header | text | `content.hero_register_href` | |
-| Detail Konten | Poin Unggulan Hero | text | `content.hero_proof` | Pisahkan dengan `\|` |
-| Detail Konten | Judul Seksi Jalur | text | `content.jalur_title` | |
-| Detail Konten | Deskripsi Seksi Jalur | textarea | `content.jalur_desc` | |
-| Detail Konten | Judul Seksi Kurikulum | text | `content.kurikulum_title` | |
-| Detail Konten | Deskripsi Seksi Kurikulum | textarea | `content.kurikulum_desc` | |
-| Detail Konten | Label Kecil Seksi Alur | text | `content.alur_kicker` | |
-| Detail Konten | Judul Seksi Alur | text | `content.alur_title` | |
-| Detail Konten | Judul Banner CTA | text | `content.cta_title` | |
-| Detail Konten | Deskripsi Banner CTA | textarea | `content.cta_desc` | |
-| Detail Konten | Label Tombol Utama | text | `content.cta_primary_label` | |
-| Detail Konten | Tautan Tombol Utama | text | `content.cta_primary_href` | |
-| Detail Konten | Label Tombol Kedua | text | `content.cta_secondary_label` | |
-| Detail Konten | Tautan Tombol Kedua | text | `content.cta_secondary_href` | |
-
-> **Perilaku singleton:** hanya boleh ada satu baris. Tombol **Buat Baru** disembunyikan saat baris sudah ada, dan tombol **Hapus** tidak pernah muncul. Semua teks di halaman `/ppdb` bersumber dari baris ini.
+> **Catatan:** Konten halaman publik `/ppdb` (Jalur Pendaftaran, Pilar Kurikulum, Alur PPDB, Teks & CTA) **tidak lagi dikelola dari CMS** — sejak migrasi `0047` seluruh konten itu statis di `apps/companyprofile/app/lib/ppdbContent.ts`, dan tab `ppdb-*` beserta entitas/tabelnya sudah dihapus.
 
 ---
 
@@ -432,7 +374,7 @@ Modal konfirmasi generik dengan konfigurasi:
 
 Nama item diambil dari kolom utama tabel (`title`), dengan fallback ke `slug`/`name`. Tujuannya: di tabel 25 baris, admin bisa memastikan item yang akan dihapus memang yang dimaksud.
 
-**Alur:** klik Hapus → `await confirm(...)` → bila `true` → `handleDelete(item)` → `DELETE /companyprofile/{endpoint}/{id}` → refetch tabel → toast "Berhasil dihapus". Tab `ppdb-copy` tidak pernah menampilkan tombol Hapus.
+**Alur:** klik Hapus → `await confirm(...)` → bila `true` → `handleDelete(item)` → `DELETE /companyprofile/{endpoint}/{id}` → refetch tabel → toast "Berhasil dihapus".
 
 ---
 
@@ -469,7 +411,7 @@ Nama item diambil dari kolom utama tabel (`title`), dengan fallback ke `slug`/`n
 | Profil admin | `GET /companyprofile/auth/me` · `PUT /companyprofile/auth/profile` |
 | Auth | `POST /companyprofile/auth/login` · `/auth/refresh` · `/auth/logout` |
 
-Entity: `hero-slides`, `news`, `programs`, `facilities`, `staff`, `achievements`, `gallery`, `testimonials`, `social-links`, `contact-info`, `settings`, `ppdb-jalur`, `ppdb-pillars`, `ppdb-steps`, `ppdb-copy`.
+Entity: `hero-slides`, `news`, `programs`, `facilities`, `staff`, `achievements`, `gallery`, `testimonials`, `social-links`, `contact-info`, `settings`.
 
 ---
 

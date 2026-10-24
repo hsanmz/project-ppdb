@@ -13,7 +13,6 @@ import {
   Newspaper, GraduationCap, Building2, Users, Trophy,
   Image as ImageIcon, MessageSquare, Link as LinkIcon, Phone, Settings,
   ArrowRight, Calendar, Sparkles, PenSquare, PictureInPicture2,
-  Route, LayoutGrid, ListOrdered, Type,
 } from 'lucide-react'
 import ProfileModal from '@/app/components/ProfileModal'
 import { DashboardShell } from '@repo/ui'
@@ -60,10 +59,6 @@ const SECTIONS: SectionDef[] = [
   { key: 'testimonials', label: 'Testimoni', icon: MessageSquare, tint: 'from-cyan-500 to-cyan-700', href: '/admin/dashboard?tab=testimonials', description: 'Kesan wali santri' },
   { key: 'social', label: 'Tautan Sosial', icon: LinkIcon, tint: 'from-indigo-500 to-indigo-700', href: '/admin/dashboard?tab=social', description: 'Media sosial' },
   { key: 'contact', label: 'Info Kontak', icon: Phone, tint: 'from-teal-500 to-teal-700', href: '/admin/dashboard?tab=contact', description: 'Hubungi kami' },
-  { key: 'ppdb-jalur', label: 'Jalur PPDB', icon: Route, tint: 'from-green-600 to-emerald-800', href: '/admin/dashboard?tab=ppdb-jalur', description: 'Kartu jalur di halaman PPDB' },
-  { key: 'ppdb-pillars', label: 'Pilar Kurikulum', icon: LayoutGrid, tint: 'from-lime-500 to-green-700', href: '/admin/dashboard?tab=ppdb-pillars', description: 'Pilar kurikulum halaman PPDB' },
-  { key: 'ppdb-steps', label: 'Alur PPDB', icon: ListOrdered, tint: 'from-orange-500 to-amber-700', href: '/admin/dashboard?tab=ppdb-steps', description: 'Langkah alur pendaftaran' },
-  { key: 'ppdb-copy', label: 'Teks & CTA PPDB', icon: Type, tint: 'from-stone-500 to-stone-700', href: '/admin/dashboard?tab=ppdb-copy', description: 'Teks seksi & banner CTA' },
   { key: 'settings', label: 'Pengaturan', icon: Settings, tint: 'from-slate-600 to-slate-800', href: '/admin/dashboard?tab=settings', description: 'Konfigurasi situs' },
 ]
 
@@ -140,7 +135,7 @@ export default function AdminOverview() {
   const fetchOverview = useCallback(async () => {
     setError('')
     try {
-      const [news, programs, facilities, staff, achievements, gallery, testimonials, social, contact, settings, ppdbJalur, ppdbPillars, ppdbSteps, ppdbCopy] =
+      const [news, programs, facilities, staff, achievements, gallery, testimonials, social, contact, settings] =
         await Promise.all([
           api.getNews(),
           api.getPrograms(),
@@ -152,10 +147,6 @@ export default function AdminOverview() {
           api.getSocialLinks(),
           api.getContactInfo(),
           api.getAdminSettings(),
-          api.getPpdbJalur(),
-          api.getPpdbPillars(),
-          api.getPpdbSteps(),
-          api.getPpdbCopy(),
         ])
       setCounts({
         news: news.length,
@@ -168,10 +159,6 @@ export default function AdminOverview() {
         social: social.length,
         contact: contact ? 1 : 0,
         settings: settings.length,
-        'ppdb-jalur': ppdbJalur.length,
-        'ppdb-pillars': ppdbPillars.length,
-        'ppdb-steps': ppdbSteps.length,
-        'ppdb-copy': ppdbCopy ? 1 : 0,
       })
       setLatestNews(
         [...news]

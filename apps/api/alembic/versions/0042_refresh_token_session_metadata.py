@@ -5,7 +5,7 @@ tabel `refresh_tokens` supaya halaman Profile (semua app) bisa menampilkan
 daftar "Sesi Perangkat": aplikasi apa, perangkat mana, IP, terakhir aktif,
 dan sisa waktu token sebelum kedaluwarsa.
 
-Revision ID: 0042
+Revision ID: 0042b
 Revises: 0041
 Create Date: 2026-10-16 10:00:00.000000
 
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0042"
+revision: str = "0042b"
 down_revision: str | None = "0041"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

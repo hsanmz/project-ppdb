@@ -36,8 +36,9 @@ def upgrade() -> None:
             batch.add_column(sa.Column("academic_year", sa.String(20), nullable=True))
         if "description" not in period_cols:
             batch.add_column(sa.Column("description", sa.Text(), nullable=True))
-        batch.alter_column("start_date", existing_type=sa.Date(), nullable=True)
-        batch.alter_column("end_date", existing_type=sa.Date(), nullable=True)
+        for name in ("start_date", "end_date"):
+            if name in period_cols:
+                batch.alter_column(name, existing_type=sa.Date(), nullable=True)
 
     # --- ppdb_waves ---
     wave_cols = {c["name"] for c in inspector.get_columns("ppdb_waves")}
@@ -51,8 +52,12 @@ def upgrade() -> None:
         ]:
             if name not in wave_cols:
                 batch.add_column(sa.Column(name, col, nullable=True))
-        batch.alter_column("start_date", existing_type=sa.Date(), nullable=True)
-        batch.alter_column("end_date", existing_type=sa.Date(), nullable=True)
+        for name in ("start_date", "end_date"):
+            # Guard: ppdb_waves.start_date/end_date sudah tidak ada lagi di
+            # model (baseline 0001 mengikuti model), jadi hanya dijalankan
+            # pada database era pra-drift yang masih memilikinya.
+            if name in wave_cols:
+                batch.alter_column(name, existing_type=sa.Date(), nullable=True)
 
 
 def downgrade() -> None:

@@ -21,7 +21,6 @@ class User(Base):
     )
     user_type: Mapped[str] = mapped_column(String(50), default="admin")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    profile: Mapped[dict | None] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(String(255), default="")
     avatar_url: Mapped[str] = mapped_column(String(255), default="")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)

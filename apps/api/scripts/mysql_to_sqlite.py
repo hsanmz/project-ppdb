@@ -17,7 +17,7 @@ MYSQL_PASSWORD = os.environ["MYSQL_PASSWORD"]
 MYSQL_DATABASE = os.environ["MYSQL_DATABASE"]
 SQLITE_URL = os.environ.get("SQLITE_URL", "sqlite:///./dev.db")
 
-SKIP_TABLES = {"refresh_tokens", "rate_limits", "audit_log"}
+SKIP_TABLES = {"refresh_tokens", "audit_log"}
 
 
 def get_mysql_engine():

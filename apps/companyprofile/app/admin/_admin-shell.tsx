@@ -14,7 +14,6 @@ import type { DashboardLinkComponent, DashboardNavGroup, DashboardNavItem } from
 export const ADMIN_SIDEBAR_GROUPS: { label: string; keys: string[] }[] = [
   { label: 'Konten', keys: ['news', 'programs', 'facilities', 'gallery', 'testimonials'] },
   { label: 'Informasi', keys: ['staff', 'achievements', 'social', 'contact'] },
-  { label: 'PPDB', keys: ['ppdb-jalur', 'ppdb-pillars', 'ppdb-steps', 'ppdb-copy'] },
   { label: 'Sistem', keys: ['settings'] },
 ]
 

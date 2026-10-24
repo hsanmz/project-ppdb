@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vite version skew (Next uses vite8 types, vitest uses vite5)
   plugins: [react() as any],
   test: {
@@ -10,6 +15,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./setupTests.ts'],
     passWithNoTests: true,
+    css: false,
   },
   resolve: {
     alias: {

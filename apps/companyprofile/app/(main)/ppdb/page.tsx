@@ -20,9 +20,9 @@ import {
 } from 'lucide-react'
 
 import { useActivePpdbWave } from '@/app/hooks/usePpdbWave'
-import { usePpdbContent } from '@/app/hooks/usePpdbContent'
 import { buildSchedule } from '@/app/lib/ppdb'
 import {
+  STATIC_PPDB_CONTENT,
   pickAccent,
   resolveIconName,
   type AccentKey,
@@ -111,7 +111,9 @@ const PPDBHero = dynamic(
 export default function PPDBPage() {
   const wave = useActivePpdbWave()
   const ppdb = buildSchedule(wave)
-  const content = usePpdbContent()
+  // Konten seksi & copy hero bersifat statis (lihat `app/lib/ppdbContent.ts`);
+  // hanya info gelombang aktif yang datang dari backend PPDB.
+  const content = STATIC_PPDB_CONTENT
 
   return (
     <div className="w-full min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -137,8 +139,8 @@ export default function PPDBPage() {
         <ShapeDividerDiagonal fill="var(--bg-secondary)" />
       </div>
 
-      {/* Info Section: Jalur, Kurikulum, Alur & CTA — seluruh isinya berasal
-          dari CMS (`/companyprofile/ppdb-*`) dengan fallback default identik. */}
+      {/* Info Section: Jalur, Kurikulum, Alur & CTA — konten statis dari
+          `app/lib/ppdbContent.ts` (tidak lagi diambil dari CMS). */}
       <section
         id="info-section"
         className="pt-28 md:pt-32 pb-20 md:pb-28 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"

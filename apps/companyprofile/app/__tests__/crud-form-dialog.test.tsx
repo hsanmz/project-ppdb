@@ -149,3 +149,91 @@ describe('CrudFormDialog — proteksi perubahan belum disimpan', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 })
+
+const EMPTY_NEWS_FORM: FormState = {
+  category: '',
+  date: '',
+  status: 'published',
+  _c_title: '',
+  _c_slug: '',
+  _c_author: '',
+  _c_excerpt: '',
+  _c_content: '',
+  image: '',
+  gallery: [],
+}
+
+function NewsHarness({ initial = EMPTY_NEWS_FORM, onClose = vi.fn() }: { initial?: FormState; onClose?: () => void }) {
+  const [formData, setFormData] = useState<FormState>(initial)
+  return (
+    <>
+      <AdminToast />
+      <AdminConfirm />
+      <CrudFormDialog
+        mode="create"
+        activeTab="news"
+        editingItem={null}
+        formData={formData}
+        setFormData={setFormData}
+        onClose={onClose}
+        onSaved={vi.fn()}
+      />
+    </>
+  )
+}
+
+describe('CrudFormDialog — modal berita & scroll independen', () => {
+  it('merender modal berita dengan scroll independen kolom kiri dan kolom kanan', () => {
+    const { container } = render(<NewsHarness />)
+
+    // Kolom kiri: data pendukung + gambar + galeri
+    const leftPane = container.querySelector('.news-scroll-pane')
+    expect(leftPane).toBeTruthy()
+    expect(leftPane?.className).toContain('overflow-y-auto')
+    expect(leftPane?.className).toContain('overscroll-contain')
+
+    // Komponen di dalam kolom kiri harus lengkap, termasuk Galeri Foto Berita
+    expect(screen.getByText('Informasi Berita')).toBeTruthy()
+    expect(screen.getByText('Publikasi')).toBeTruthy()
+    expect(screen.getByText('Gambar Utama')).toBeTruthy()
+    expect(screen.getByText('Galeri Foto Berita')).toBeTruthy()
+
+    // Kolom kanan: editor berita
+    expect(screen.getByText('Isi Berita')).toBeTruthy()
+
+    // Toolbar editor harus tidak ikut scroll (shrink-0)
+    const toolbar = container.querySelector('[aria-label="Format blok"]')?.closest('div')
+    expect(toolbar).toBeTruthy()
+    expect(toolbar?.className).toContain('shrink-0')
+
+    // Area tulis editor berita memiliki scroll independen saat konten meluap
+    const editorContent = container.querySelector('.news-editor-content')
+    expect(editorContent).toBeTruthy()
+    expect(editorContent?.className).toContain('overflow-y-auto')
+    expect(editorContent?.className).toContain('overscroll-contain')
+    expect(editorContent?.className).toContain('flex-1')
+
+    // Footer editor harus tetap diam di bawah (shrink-0)
+    const shortcutsHint = screen.getByText(/Pintasan: Ctrl\/⌘ \+ B tebal/i).closest('div')
+    expect(shortcutsHint).toBeTruthy()
+    expect(shortcutsHint?.className).toContain('shrink-0')
+  })
+
+  it('input galeri foto berita tersedia dan dapat menambah gambar via file/URL', async () => {
+    render(<NewsHarness />)
+
+    // Bagian galeri harus terlihat di DOM
+    const galleryHeading = screen.getByText('Galeri Foto Berita')
+    expect(galleryHeading).toBeTruthy()
+
+    // Tersedia tombol file upload dan tombol URL
+    expect(screen.getAllByRole('button', { name: /Upload/i }).length).toBeGreaterThan(0)
+    const urlButtons = screen.getAllByRole('button', { name: /URL/i })
+    expect(urlButtons.length).toBeGreaterThan(0)
+
+    // Toggle ke mode URL pada input galeri (tombol URL terakhir)
+    fireEvent.click(urlButtons[urlButtons.length - 1])
+    expect(screen.getByPlaceholderText('https://example.com/image.jpg')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Tambah galeri/i })).toBeTruthy()
+  })
+})

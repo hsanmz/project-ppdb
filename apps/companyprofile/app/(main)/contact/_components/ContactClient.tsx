@@ -12,6 +12,7 @@ import {
   type PpdbSchedule,
 } from '@/app/lib/ppdb'
 import type { ContactInfo, SocialLink } from '@/app/lib/types'
+import { mapsFallbackUrl, mapsSearchUrl, resolveMapsEmbed } from '@/app/lib/maps-embed'
 
 /**
  * Susun kalimat jadwal PPDB hanya dari field yang benar-benar ada di backend.
@@ -82,14 +83,15 @@ export default function ContactClient({
     i === 0 ? { ...f, answer: buildScheduleAnswer(ppdb) } : f,
   )
   const address = contactInfo?.address ?? ''
-  const rawEmbed = (contactInfo?.maps_embed ?? '').trim()
-  const isRawIframe = rawEmbed.toLowerCase().startsWith('<iframe')
-  const embedSrcMatch = rawEmbed.match(/src=["']([^"']+)["']/)
-  const embedSrc = embedSrcMatch ? embedSrcMatch[1] : rawEmbed
-  const mapsEmbedUrl = !isRawIframe && embedSrc && /^https?:\/\//.test(embedSrc)
-    ? embedSrc
-    : `https://www.google.com/maps?q=${encodeURIComponent(address || 'Bekasi, Indonesia')}&output=embed`
-  const mapsLinkUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || 'Bekasi, Indonesia')}`
+  /**
+   * Nilai `maps_embed` diselesaikan via util bersama `lib/maps-embed`:
+   * URL langsung maupun kode <iframe> hanya dipakai jika host-nya Google
+   * Maps. HTML mentah tidak pernah disuntikkan; bila embed kosong/tidak
+   * valid, peta fallback alamat digunakan seperti sebelumnya.
+   */
+  const embed = resolveMapsEmbed(contactInfo?.maps_embed)
+  const mapsEmbedUrl = embed.status === 'valid' && embed.src ? embed.src : mapsFallbackUrl(address)
+  const mapsLinkUrl = mapsSearchUrl(address)
 
   useEffect(() => {
     document.title = 'Hubungi Kami | PTDARRAHMAN'
@@ -142,21 +144,14 @@ export default function ContactClient({
                   {address || 'Alamat belum tersedia. Hubungi kami untuk detail lokasi.'}
                 </p>
                 <div className="rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-sm">
-                  {isRawIframe ? (
-                    <div
-                      className="maps-embed w-full h-[320px] sm:h-[420px]"
-                      dangerouslySetInnerHTML={{ __html: rawEmbed }}
-                    />
-                  ) : (
-                    <iframe
-                      src={mapsEmbedUrl}
-                      title="Lokasi PTDARRAHMAN"
-                      className="w-full h-[320px] sm:h-[420px] block"
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      allowFullScreen
-                    />
-                  )}
+                  <iframe
+                    src={mapsEmbedUrl}
+                    title="Lokasi PTDARRAHMAN"
+                    className="block h-[320px] w-full sm:h-[420px]"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                  />
                 </div>
                 <a
                   href={mapsLinkUrl}

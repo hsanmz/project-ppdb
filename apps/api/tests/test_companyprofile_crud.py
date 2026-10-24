@@ -271,8 +271,6 @@ def test_non_object_body_is_400(cp: TestClient) -> None:
     ("entity", "body", "missing"),
     [
         ("news", {"slug": "a"}, "category"),
-        ("news", {"category": "c"}, "slug"),
-        ("programs", {}, "slug"),
         ("facilities", {}, "category"),
         ("staff", {}, "role"),
         ("achievements", {}, "year"),
@@ -290,7 +288,7 @@ def test_missing_required_field_is_422(
 
 
 def test_blank_required_field_is_422(cp: TestClient) -> None:
-    resp = cp.post("/companyprofile/news", json={"slug": "   ", "category": "c"})
+    resp = cp.post("/companyprofile/facilities", json={"category": "   "})
     assert resp.status_code == 422, resp.text
 
 
@@ -346,6 +344,82 @@ def test_slug_is_normalized_on_create(cp: TestClient) -> None:
     record = cast(dict[str, Any], resp.json())
     assert record["slug"] == "gelombang-baru-2026"
     cp.delete(f"/companyprofile/news/{record['id']}")
+
+
+def test_news_slug_is_generated_from_content_title(cp: TestClient) -> None:
+    """Form admin tidak mengirim slug; backend membuatnya dari judul konten."""
+    created = cp.post(
+        "/companyprofile/news",
+        json={
+            "category": "Uji",
+            "content": json.dumps({"title": "Kabar Baik dari Pesantren"}),
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = cast(dict[str, Any], created.json())
+    try:
+        assert body["slug"] == "kabar-baik-dari-pesantren"
+    finally:
+        cp.delete(f"/companyprofile/news/{body['id']}")
+
+
+def test_generated_slug_is_unique(cp: TestClient) -> None:
+    ids: list[str] = []
+    slugs: list[str] = []
+    try:
+        for _ in range(2):
+            resp = cp.post(
+                "/companyprofile/programs",
+                json={"content": json.dumps({"title": "Program Unggulan"})},
+            )
+            assert resp.status_code == 200, resp.text
+            body = cast(dict[str, Any], resp.json())
+            ids.append(body["id"])
+            slugs.append(body["slug"])
+        assert slugs == ["program-unggulan", "program-unggulan-2"]
+    finally:
+        for pid in ids:
+            cp.delete(f"/companyprofile/programs/{pid}")
+
+
+def test_update_regenerates_slug_when_it_was_auto_generated(
+    cp: TestClient,
+) -> None:
+    created = cp.post(
+        "/companyprofile/news",
+        json={"category": "Uji", "content": json.dumps({"title": "Judul Awal"})},
+    )
+    body = cast(dict[str, Any], created.json())
+    try:
+        updated = cp.put(
+            f"/companyprofile/news/{body['id']}",
+            json={"content": json.dumps({"title": "Judul Baru"})},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["slug"] == "judul-baru"
+    finally:
+        cp.delete(f"/companyprofile/news/{body['id']}")
+
+
+def test_update_keeps_explicit_slug(cp: TestClient) -> None:
+    created = cp.post(
+        "/companyprofile/news",
+        json={
+            "slug": "url-pilihan-sendiri",
+            "category": "Uji",
+            "content": json.dumps({"title": "Judul Awal"}),
+        },
+    )
+    body = cast(dict[str, Any], created.json())
+    try:
+        updated = cp.put(
+            f"/companyprofile/news/{body['id']}",
+            json={"content": json.dumps({"title": "Judul Baru"})},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["slug"] == "url-pilihan-sendiri"
+    finally:
+        cp.delete(f"/companyprofile/news/{body['id']}")
 
 
 def test_duplicate_slug_is_409(cp: TestClient) -> None:
@@ -507,15 +581,18 @@ def test_create_update_delete_are_audited(cp: TestClient) -> None:
     assert "delete" in actions, actions
 
 
-def test_change_broadcast_payload(cp: TestClient) -> None:
+def test_change_broadcast_payload(
+    cp: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Subscribers need entity/id/action to avoid refetching every list."""
     from src.core.events import companyprofile_hub
 
     sent: list[dict[str, Any]] = []
-    original = companyprofile_hub.broadcast
-    companyprofile_hub.broadcast = lambda payload=None, **kw: sent.append(
-        cast(dict[str, Any], payload if payload is not None else kw)
-    )
+
+    def _mock_broadcast(payload=None, **kw):
+        sent.append(cast(dict[str, Any], payload if payload is not None else kw))
+
+    monkeypatch.setattr(companyprofile_hub, "broadcast", _mock_broadcast)
     try:
         created = cp.post(
             "/companyprofile/staff", json={"role": "Guru Uji", "image": "s.png"}
@@ -537,18 +614,21 @@ def test_change_broadcast_payload(cp: TestClient) -> None:
         assert sent[-1]["action"] == "delete"
         assert sent[-1]["id"] == sid
     finally:
-        companyprofile_hub.broadcast = original
+        pass
 
 
-def test_contact_info_update_broadcasts(cp: TestClient) -> None:
+def test_contact_info_update_broadcasts(
+    cp: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """This route used to be the one CMS write that never broadcast."""
     from src.core.events import companyprofile_hub
 
     sent: list[dict[str, Any]] = []
-    original = companyprofile_hub.broadcast
-    companyprofile_hub.broadcast = lambda payload=None, **kw: sent.append(
-        cast(dict[str, Any], payload if payload is not None else kw)
-    )
+
+    def _mock_broadcast(payload=None, **kw):
+        sent.append(cast(dict[str, Any], payload if payload is not None else kw))
+
+    monkeypatch.setattr(companyprofile_hub, "broadcast", _mock_broadcast)
     try:
         resp = cp.put("/companyprofile/contact-info", json={"phone_primary": "08123"})
         assert resp.status_code == 200, resp.text
@@ -556,7 +636,7 @@ def test_contact_info_update_broadcasts(cp: TestClient) -> None:
         assert sent[0]["entity"] == "contact-info"
         assert sent[0]["action"] == "update"
     finally:
-        companyprofile_hub.broadcast = original
+        pass
 
 
 def test_audit_failure_does_not_fail_the_write(
@@ -622,98 +702,6 @@ def test_list_strips_heavy_content(cp: TestClient) -> None:
 
 
 # --------------------------------------------------------------------------
-# PPDB landing content (jalur, pillars, steps, teks & CTA singleton)
-# --------------------------------------------------------------------------
-
-
-def test_ppdb_landing_content_is_seeded(cp: TestClient) -> None:
-    """Migrasi 0042 menyemai konten awal supaya halaman publik tidak kosong."""
-    minimums = {
-        "ppdb-jalur": 2,
-        "ppdb-pillars": 4,
-        "ppdb-steps": 4,
-        "ppdb-copy": 1,
-    }
-    for entity, minimum in minimums.items():
-        resp = cp.get(f"/companyprofile/{entity}")
-        assert resp.status_code == 200, resp.text
-        rows = cast(list[dict[str, Any]], resp.json())
-        assert len(rows) >= minimum, (entity, len(rows))
-
-
-def test_ppdb_step_crud_lifecycle(cp: TestClient) -> None:
-    created = cp.post(
-        "/companyprofile/ppdb-steps",
-        json={"content": json.dumps({"order": 9, "title": "Uji Langkah"})},
-    )
-    assert created.status_code == 200, created.text
-    rid = cast(dict[str, Any], created.json())["id"]
-    try:
-        listed = cp.get("/companyprofile/ppdb-steps").json()
-        row = next(r for r in listed if r["id"] == rid)
-        # The list view must keep the editable content for the admin table.
-        assert json.loads(row["content"])["title"] == "Uji Langkah"
-
-        updated = cp.put(
-            f"/companyprofile/ppdb-steps/{rid}",
-            json={"content": json.dumps({"title": "Uji Langkah 2"})},
-        )
-        assert updated.status_code == 200, updated.text
-        assert json.loads(updated.json()["content"])["title"] == "Uji Langkah 2"
-    finally:
-        assert cp.delete(f"/companyprofile/ppdb-steps/{rid}").status_code == 200
-
-
-def test_ppdb_jalur_accepts_icon_column(cp: TestClient) -> None:
-    created = cp.post(
-        "/companyprofile/ppdb-jalur",
-        json={"icon": "Award", "content": json.dumps({"title": "Jalur Uji"})},
-    )
-    assert created.status_code == 200, created.text
-    body = cast(dict[str, Any], created.json())
-    try:
-        assert body["icon"] == "Award"
-    finally:
-        cp.delete(f"/companyprofile/ppdb-jalur/{body['id']}")
-
-
-def test_ppdb_copy_rejects_second_row(cp: TestClient) -> None:
-    """`ppdb-copy` adalah singleton: halaman publik membaca satu sumber teks."""
-    resp = cp.post(
-        "/companyprofile/ppdb-copy",
-        json={"content": json.dumps({"cta_title": "Duplikat"})},
-    )
-    assert resp.status_code == 409, resp.text
-    assert "already has a row" in resp.text
-
-
-def test_ppdb_copy_row_can_be_edited_and_restored(cp: TestClient) -> None:
-    rows = cast(list[dict[str, Any]], cp.get("/companyprofile/ppdb-copy").json())
-    assert rows, "seed copy row missing"
-    row = rows[0]
-    original = row["content"]
-    try:
-        updated = cp.put(
-            f"/companyprofile/ppdb-copy/{row['id']}",
-            json={"content": json.dumps({"cta_title": "Judul Uji"})},
-        )
-        assert updated.status_code == 200, updated.text
-        assert json.loads(updated.json()["content"])["cta_title"] == "Judul Uji"
-    finally:
-        cp.put(f"/companyprofile/ppdb-copy/{row['id']}", json={"content": original})
-
-
-def test_ppdb_entities_reject_unknown_fields(cp: TestClient) -> None:
-    resp = cp.post("/companyprofile/ppdb-steps", json={"slug": "x"})
-    assert resp.status_code == 422, resp.text
-    assert "slug" in resp.text
-    # Tab PPDB tidak punya unggahan gambar; kolom `image` bukan field yang bisa ditulis.
-    resp_image = cp.post("/companyprofile/ppdb-jalur", json={"image": "a.png"})
-    assert resp_image.status_code == 422, resp_image.text
-    assert "image" in resp_image.text
-
-
-# --------------------------------------------------------------------------
 # Hero beranda (slide: teks, gambar, tombol)
 # --------------------------------------------------------------------------
 
@@ -761,7 +749,9 @@ def test_hero_slide_crud_lifecycle(cp: TestClient) -> None:
         assert body["order"] == 3
         assert body["image"].endswith("hero.png")
 
-        listed = cast(list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json())
+        listed = cast(
+            list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json()
+        )
         row = next(r for r in listed if r["id"] == rid)
         # List view must keep the editable content for the admin table.
         assert json.loads(row["content"])["title"] == "Pesantren\nTahfidz\nDigital"
@@ -801,7 +791,9 @@ def test_hero_slides_list_is_ordered_by_order_column(cp: TestClient) -> None:
             assert resp.status_code == 200, resp.text
             ids.append(cast(dict[str, Any], resp.json())["id"])
 
-        listed = cast(list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json())
+        listed = cast(
+            list[dict[str, Any]], cp.get("/companyprofile/hero-slides").json()
+        )
         mine = [r for r in listed if r["id"] in ids]
         assert [json.loads(r["content"])["title"] for r in mine] == [
             "Slide Pertama",
@@ -839,9 +831,7 @@ def test_program_accepts_order_column(cp: TestClient) -> None:
     try:
         assert body["order"] == 7
         # Nilai dari form adalah string; harus dikonversi router, bukan error.
-        updated = cp.put(
-            f"/companyprofile/programs/{body['id']}", json={"order": "12"}
-        )
+        updated = cp.put(f"/companyprofile/programs/{body['id']}", json={"order": "12"})
         assert updated.status_code == 200, updated.text
         assert updated.json()["order"] == 12
     finally:

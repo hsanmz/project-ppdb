@@ -38,7 +38,6 @@ NO_UPDATED_AT = {
     "audit_log",
     "user_page_permissions",
     "file_uploads",
-    "rate_limits",
     "notification_logs",
 }
 

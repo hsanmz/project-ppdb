@@ -7,10 +7,6 @@ import type {
   GalleryItem,
   HeroSlide,
   NewsArticle,
-  PpdbJalurCard,
-  PpdbPageCopy,
-  PpdbPillar,
-  PpdbStep,
   Program,
   SettingsItem,
   SocialLink,
@@ -360,29 +356,6 @@ export async function getSocialLinks(): Promise<SocialLink[]> {
   )
 }
 
-// ── Konten landing PPDB (tab Jalur/Pilar/Alur/Teks PPDB di dashboard) ──
-
-export async function getPpdbJalur(): Promise<PpdbJalurCard[]> {
-  const items = await fetchApi<JsonValue[]>('/ppdb-jalur')
-  return items.map((item) => mapContent(item) as unknown as PpdbJalurCard)
-}
-
-export async function getPpdbPillars(): Promise<PpdbPillar[]> {
-  const items = await fetchApi<JsonValue[]>('/ppdb-pillars')
-  return items.map((item) => mapContent(item) as unknown as PpdbPillar)
-}
-
-export async function getPpdbSteps(): Promise<PpdbStep[]> {
-  const items = await fetchApi<JsonValue[]>('/ppdb-steps')
-  return items.map((item) => mapContent(item) as unknown as PpdbStep)
-}
-
-export async function getPpdbCopy(): Promise<PpdbPageCopy | null> {
-  const items = await fetchApi<JsonValue[]>('/ppdb-copy')
-  const row = items[0]
-  return row ? (mapContent(row) as unknown as PpdbPageCopy) : null
-}
-
 // ── Hero beranda (tab Hero Beranda di dashboard) ──
 
 export async function getHeroSlides(): Promise<HeroSlide[]> {
@@ -408,8 +381,17 @@ export async function getEntityPage(
 }
 
 export async function getContactInfo(): Promise<ContactInfo | null> {
-  const item = await fetchApi<JsonValue | null>('/contact-info')
-  return (item ?? null) as unknown as ContactInfo | null
+  // Backend membalas 404 saat tabel contact_info masih kosong (database baru).
+  // Itu bukan error — perlakukan sebagai "belum ada data" agar editor Info
+  // Kontak bisa membuat baris pertama lewat PUT /contact-info. Error lain
+  // (500, koneksi, dsb.) tetap dilempar.
+  try {
+    const item = await fetchApi<JsonValue | null>('/contact-info')
+    return (item ?? null) as unknown as ContactInfo | null
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('404')) return null
+    throw e
+  }
 }
 
 export async function updateContactInfo(data: JsonValue) {

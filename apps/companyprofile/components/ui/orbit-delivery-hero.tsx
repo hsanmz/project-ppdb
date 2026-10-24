@@ -4203,8 +4203,8 @@ function buildStories(academicYear) {
 
 
 
-// Copy hero dari CMS (entitas 'ppdb-copy'). Field kosong/whitespace jatuh ke
-// teks bawaan supaya halaman tetap utuh walau konten hero belum diisi admin.
+// Copy hero dari halaman /ppdb (statis: STATIC_PPDB_COPY di app/lib/ppdbContent.ts).
+// Field kosong/whitespace jatuh ke teks bawaan supaya halaman tetap utuh.
 
 function cleanHeroCopy(value) {
 
@@ -5126,7 +5126,7 @@ function OrbitDeliveryHero(props) {
 
   var academicYear = props.academicYear || null;
 
-  // Copy hero dari CMS (entitas 'ppdb-copy'); default di buildHeroCopy.
+  // Copy hero dari halaman /ppdb; default di buildHeroCopy.
   var copy = props.copy || null;
 
   // Hex color for the courier's shirt (torso + sleeves). Pass null for the original white clay.

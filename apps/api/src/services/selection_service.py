@@ -922,11 +922,10 @@ class SelectionService:
         # Nilai TIU jika ada
         tiu_res = self.repo.get_tiu_result_by_applicant(app.id)
         tiu_score = tiu_res.score if tiu_res else None
-        tiu_completed_at = (
-            tiu_res.completed_at.isoformat()
-            if (tiu_res and tiu_res.completed_at)
-            else None
+        tiu_date = getattr(tiu_res, "completed_at", None) or getattr(
+            tiu_res, "created_at", None
         )
+        tiu_completed_at = tiu_date.isoformat() if (tiu_res and tiu_date) else None
 
         scores_rows = self.repo.get_applicant_scores_full(app.id)
         scores = []

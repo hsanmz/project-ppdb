@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from src.models.auth import User
-from src.models.ppdb import PPDBApplicant, PPDBPeriod, PPDBWave, TIUResult
+from src.models.ppdb import PPDBApplicant, PPDBPeriod, PPDBWave
 from src.models.selection import (
     SelectionCategory,
     SelectionCriteria,
@@ -580,6 +580,17 @@ class SelectionRepository:
         )
         return cast(Sequence[SelectionSession], self.db.scalars(stmt).all())
 
-    def get_tiu_result_by_applicant(self, applicant_id: str) -> TIUResult | None:
-        stmt = select(TIUResult).where(TIUResult.applicant_id == applicant_id)
-        return cast(TIUResult | None, self.db.execute(stmt).scalars().first())
+    def get_tiu_result_by_applicant(self, applicant_id: str) -> Any | None:
+        """Ambil skor TIU pendaftar dari selection_scores."""
+        stmt = (
+            select(SelectionScore)
+            .join(SelectionCriteria, SelectionCriteria.id == SelectionScore.criteria_id)
+            .join(
+                SelectionCategory, SelectionCategory.id == SelectionCriteria.category_id
+            )
+            .where(
+                SelectionScore.applicant_id == applicant_id,
+                SelectionCategory.name.ilike("%TIU%"),
+            )
+        )
+        return self.db.execute(stmt).scalars().first()

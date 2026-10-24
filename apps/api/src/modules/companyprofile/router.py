@@ -53,16 +53,7 @@ TABLES = {
     "social-links": "social_links",
     "testimonials": "testimonials",
     "hero-slides": "hero_slides",
-    "ppdb-jalur": "ppdb_jalur_cards",
-    "ppdb-pillars": "ppdb_pillars",
-    "ppdb-steps": "ppdb_steps",
-    "ppdb-copy": "ppdb_page_copy",
 }
-
-# Entitas singleton: hanya boleh ada satu baris. Halaman publik `/ppdb`
-# membacanya sebagai satu sumber teks (judul seksi + banner CTA); baris kedua
-# membuat "yang mana yang tampil" jadi tidak deterministik.
-SINGLETON_ENTITIES: frozenset[str] = frozenset({"ppdb-copy"})
 
 PUBLIC_SETTINGS_KEYS = {
     "favicon",
@@ -211,6 +202,60 @@ def assert_slug_available(
         raise HTTPException(
             status_code=409, detail=f"Slug '{slug}' is already used by another item"
         )
+
+
+def content_title(raw: Any) -> str:
+    """Ambil judul dari JSON `content` (string JSON atau dict)."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(raw, dict):
+        for key in ("title", "name"):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
+def slugify_title(title: str) -> str:
+    """Normalisasi judul menjadi slug; '' bila judul tidak bisa dipakai."""
+    from src.modules.companyprofile.schemas import normalize_slug
+
+    if not title:
+        return ""
+    try:
+        return normalize_slug(title)
+    except ValueError:
+        return ""
+
+
+SLUG_FALLBACK_PREFIX = {"news": "berita", "programs": "program"}
+
+
+def auto_slug(entity: str, title: str, exclude_id: str | None = None) -> str:
+    """Slug unik dari judul artikel/program.
+
+    Judul yang sama tidak menghasilkan URL ganda: bentrokan diberi akhiran
+    ``-2``, ``-3``, dan seterusnya. Bila judul kosong/tidak bisa dinormalkan
+    (mis. hanya tanda baca), dipakai awalan entitas + potongan UUID supaya
+    kolom NOT NULL tetap terisi.
+    """
+    base = slugify_title(title)
+    if not base:
+        base = f"{SLUG_FALLBACK_PREFIX.get(entity, entity)}-{uuid.uuid4().hex[:8]}"
+    # `slug` kolomnya 255 karakter; sisakan ruang untuk akhiran unik.
+    base = base[:240].strip("-") or uuid.uuid4().hex[:8]
+
+    candidate = base
+    suffix = 2
+    while True:
+        clash = get_by_slug(TABLES[entity], candidate)
+        if clash is None or clash.get("id") == exclude_id:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +436,8 @@ async def cp_logout(
         except Exception:  # noqa: BLE001 - logout tetap lanjut walau token rusak
             pass
     else:
-        # Fallback jika refresh_token tidak dikirim (misal cookie diblokir atau hanya bearer access_token)
+        # Fallback jika refresh_token tidak dikirim
+        # (misal cookie diblokir atau hanya bearer access_token)
         try:
             auth_header = request.headers.get("authorization") or ""
             access_token = None
@@ -751,13 +797,13 @@ async def cp_entity_create(
 ):
     reject_reserved(entity)
     table = get_table(entity)
-    if entity in SINGLETON_ENTITIES and await asyncio.to_thread(get_first, table):
-        raise HTTPException(
-            status_code=409,
-            detail=f"'{entity}' already has a row. Edit the existing row instead.",
-        )
     body = await _read_json(request)
     payload = sanitize_or_422(entity, body, partial=False)
+    from src.modules.companyprofile.schemas import SLUG_ENTITIES
+
+    if entity in SLUG_ENTITIES and not payload.get("slug"):
+        # Form admin tidak lagi meminta slug: dibuat otomatis dari judul.
+        payload["slug"] = auto_slug(entity, content_title(payload.get("content")))
     assert_slug_available(entity, str(payload.get("slug", "")))
     try:
         record = await asyncio.to_thread(create_record, table, payload)
@@ -777,12 +823,26 @@ async def cp_entity_update(
 ):
     reject_reserved(entity)
     table = get_table(entity)
-    if not await asyncio.to_thread(get_by_id, table, id):
+    existing = await asyncio.to_thread(get_by_id, table, id)
+    if not existing:
         raise HTTPException(status_code=404, detail=f"{entity} not found")
     body = await _read_json(request)
     # partial=True: a NOT NULL column that the admin did not touch must not
     # make the whole update fail.
     payload = sanitize_or_422(entity, body, partial=True)
+    from src.modules.companyprofile.schemas import SLUG_ENTITIES
+
+    if entity in SLUG_ENTITIES and not payload.get("slug"):
+        # Slug tidak dikirim form (tidak ada input slug). Pertahankan slug lama
+        # supaya URL publik yang sudah dibagikan tidak mati — kecuali slug lama
+        # memang slug otomatis dari judul lama, maka ikut judul baru.
+        current_slug = str(existing.get("slug") or "")
+        new_title = content_title(payload.get("content"))
+        old_title = content_title(existing.get("content"))
+        if not current_slug:
+            payload["slug"] = auto_slug(entity, new_title or old_title, exclude_id=id)
+        elif new_title and current_slug == slugify_title(old_title):
+            payload["slug"] = auto_slug(entity, new_title, exclude_id=id)
     if payload.get("slug"):
         assert_slug_available(entity, str(payload["slug"]), exclude_id=id)
     try:

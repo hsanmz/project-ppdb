@@ -25,10 +25,10 @@ from typing import Any
 # are not listed here are rejected (400), not silently dropped or forwarded to SQL.
 #
 # NOTE on `order`: only entities that really have an `order` column accept it
-# here (`hero-slides`, `programs`, `testimonials` -- see `INT_COLUMNS`). The PPDB
-# entities and `staff` keep their display order inside the JSON `content`
-# (`content.order`) because their tables have no such column, so `order` is
-# deliberately absent from their whitelist and sending it would be a 422.
+# here (`hero-slides`, `programs`, `testimonials` -- see `INT_COLUMNS`). The
+# `staff` entity keeps its display order inside the JSON `content`
+# (`content.order`) because its table has no such column, so `order` is
+# deliberately absent from its whitelist and sending it would be a 422.
 ENTITY_COLUMNS: dict[str, set[str]] = {
     "news": {"slug", "category", "date", "image", "gallery", "content"},
     "programs": {"slug", "icon", "image", "order", "content"},
@@ -39,18 +39,16 @@ ENTITY_COLUMNS: dict[str, set[str]] = {
     "social-links": {"label", "href", "path"},
     "testimonials": {"name", "child", "image", "order", "content"},
     "hero-slides": {"image", "order", "content"},
-    "ppdb-jalur": {"icon", "content"},
-    "ppdb-pillars": {"icon", "content"},
-    "ppdb-steps": {"content"},
-    "ppdb-copy": {"content"},
 }
 
 # Columns that must be present (and non-empty) when creating a row. Mirrors the
 # `nullable=False` declarations in `src/models/content.py`. Checked on create
 # only -- see the module docstring.
 REQUIRED_FIELDS: dict[str, set[str]] = {
-    "news": {"slug", "category"},
-    "programs": {"slug"},
+    # `slug` sengaja tidak wajib: bila tidak dikirim, backend membuatnya
+    # otomatis dari judul konten (lihat `auto_slug` di router).
+    "news": {"category"},
+    "programs": set(),
     "facilities": {"category"},
     "staff": {"role"},
     "achievements": {"year"},
@@ -208,6 +206,10 @@ def sanitize_entity_payload(
         if key in int_fields:
             sanitized[key] = _to_int(value, key)
         elif key == "slug" and entity in SLUG_ENTITIES:
+            # Slug kosong berarti "biarkan sistem membuatnya dari judul".
+            # Slug eksplisit tetap dinormalkan dan diperiksa panjangnya.
+            if _is_blank(value):
+                continue
             slug = normalize_slug(value)
             _check_length(key, slug)
             sanitized[key] = slug

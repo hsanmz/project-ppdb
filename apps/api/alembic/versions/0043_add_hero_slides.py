@@ -1,7 +1,7 @@
 """Tabel slide hero beranda + halaman permission `hero`.
 
-Revision ID: 0043
-Revises: 0042
+Revision ID: 0043b
+Revises: 0042b
 Create Date: 2026-10-17
 
 Hero beranda `/` sebelumnya hardcode di
@@ -23,8 +23,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0043"
-down_revision: str | None = "0042"
+revision: str = "0043b"
+down_revision: str | None = "0042b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -67,9 +67,7 @@ def _ensure_page(bind: sa.engine.Connection) -> None:
     key, label, icon, sort_order = HERO_PAGE
     now = datetime.now()
     existing = bind.execute(
-        sa.select(pages.c.id).where(
-            pages.c.module_id == module.id, pages.c.key == key
-        )
+        sa.select(pages.c.id).where(pages.c.module_id == module.id, pages.c.key == key)
     ).first()
     values = {
         "label": label,

@@ -11,5 +11,16 @@
     "turbo": "^2.1.2",
     "vitest": "^2.1.0"
   },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": [
+        "win32",
+        "linux"
+      ],
+      "cpu": [
+        "x64"
+      ]
+    }
+  },
   "packageManager": "pnpm@9.10.0"
 }

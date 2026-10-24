@@ -4,24 +4,26 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import Image from 'next/image'
 import {
-  AlertTriangle, FileText, Image as ImageIcon, Images, ListChecks, Link2, Loader2,
+  AlertTriangle, CalendarDays, FileText, Image as ImageIcon, Images, ListChecks, Link2, Loader2,
   Plus, Save, ShieldCheck, Trash2, Upload, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import * as api from '@/app/lib/api'
 import { cn } from '@/app/lib/utils'
 import { isFormDirty, UNSAVED_CHANGES_CONFIRM } from '@/app/lib/form-dirty'
+import { looksLikeHtml, sanitizeRichHtml } from '@/app/lib/rich-text'
 import { toast } from '@/app/components/ui/AdminToast'
 import { confirm } from '@/app/components/ui/AdminConfirm'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import { Textarea } from '@/app/components/ui/Textarea'
 import { Label } from '@/app/components/ui/Label'
+import { RichTextEditor } from '@/app/components/ui/RichTextEditor'
 import {
   Dialog, DialogContent, DialogTitle,
 } from '@/app/components/ui/Dialog'
 import {
-  TABS, FORM_FIELDS, CONTENT_FIELDS, HAS_CONTENT, NO_IMAGE_TABS, SOCIAL_PRESETS, maxLengthFor,
+  TABS, FORM_FIELDS, CONTENT_FIELDS, HAS_CONTENT, maxLengthFor,
 } from './_constants'
 import type { RowRecord, FormState } from './_types'
 import { errorMessage } from './_types'
@@ -50,15 +52,13 @@ const TEXTAREA_CLASS =
 const FIELD_ERROR_CLASS =
   'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20'
 
+const SELECT_CLASS =
+  'h-11 w-full rounded-xl border border-[var(--border)] bg-white/90 px-3 text-sm text-[var(--text)] transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none'
+
 export function CrudFormDialog({
   mode, activeTab, editingItem, formData, setFormData, onClose, onSaved,
 }: Props) {
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload')
-  const [galleryInputMode, setGalleryInputMode] = useState<'upload' | 'url'>('upload')
-  const [galleryInputValue, setGalleryInputValue] = useState('')
-  const [galleryUploading, setGalleryUploading] = useState(false)
 
   // Error validasi per kolom, dibaca dari `errorMessage` backend maupun dari
   // pengecekan sendiri. Kuncinya adalah nama field (bukan index) supaya bisa
@@ -107,6 +107,13 @@ export function CrudFormDialog({
       } else if (f.type === 'parent') {
         if (raw) content[f.name] = String(raw)
         else delete content[f.name]
+      } else if (f.name === 'content' && activeTab === 'news') {
+        // Isi berita ditulis lewat editor WYSIWYG. Bersihkan sekali lagi saat
+        // menyimpan: paste dari Word/web atau payload lama tidak boleh
+        // menyelipkan tag/atribut berbahaya. Artikel teks polos lama
+        // dibiarkan apa adanya agar tetap dirender oleh RichContent.
+        const text = String(raw)
+        content[f.name] = looksLikeHtml(text) ? sanitizeRichHtml(text) : text
       } else {
         content[f.name] = raw
       }
@@ -145,6 +152,11 @@ export function CrudFormDialog({
           payload[f.name] = val
         }
       }
+      // Judul berita dipakai backend untuk membuat slug otomatis, dan tanpa
+      // judul artikel tidak berarti apa pun di halaman publik.
+      if (activeTab === 'news' && String(formData['_c_title'] ?? '').trim() === '') {
+        errors['_c_title'] = 'Judul Berita wajib diisi'
+      }
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors)
         const firstInvalid = Object.keys(errors)[0]
@@ -154,8 +166,7 @@ export function CrudFormDialog({
         return
       }
       setFieldErrors({})
-      const showImage = activeTab !== 'social' && !NO_IMAGE_TABS.includes(activeTab)
-      if (showImage) payload.image = formData.image || ''
+      payload.image = formData.image || ''
       if (activeTab === 'news') payload.gallery = JSON.stringify(formData.gallery ?? [])
       if (HAS_CONTENT.includes(activeTab)) {
         payload.content = JSON.stringify(buildContent())
@@ -203,54 +214,17 @@ export function CrudFormDialog({
     })
   }
 
-  async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const url = await api.uploadImage(file)
-      setFormData({ ...formData, image: url })
-      // Upload hanya menaruh file di storage; datanya baru tersimpan saat
-      // admin menekan "Simpan". Pesan lama ("berhasil diunggah") membuat
-      // admin mengira datanya sudah aman.
-      toast('success', 'Gambar diunggah — tekan Simpan untuk menyimpan')
-    } catch (e) {
-      toast('error', 'Upload gagal: ' + errorMessage(e))
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function handleGalleryUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setGalleryUploading(true)
-    try {
-      const url = await api.uploadImage(file)
-      setFormData({ ...formData, gallery: [...(formData.gallery || []), url] })
-      toast('success', 'Gambar ditambahkan ke galeri — tekan Simpan untuk menyimpan')
-    } catch (e) {
-      toast('error', 'Upload gagal: ' + errorMessage(e))
-    } finally {
-      setGalleryUploading(false)
-    }
-  }
-
-  function addGalleryItem(url: string) {
-    if (!url.trim()) return
-    setFormData({ ...formData, gallery: [...(formData.gallery || []), url.trim()] })
-    setGalleryInputValue('')
-  }
-
-  function removeGalleryItem(index: number) {
-    const updated = [...(formData.gallery || [])]
-    updated.splice(index, 1)
-    setFormData({ ...formData, gallery: updated })
-  }
-
   const fields = FORM_FIELDS[activeTab] || []
-  const galleryCount = (formData.gallery || []).length
   const hasRequired = fields.some((f) => f.required)
+
+  // ── Berita: layout dua kolom ───────────────────────────────────────────────
+  // Isi artikel adalah konten utama, jadi mendapat kolom kanan yang lebar
+  // dengan editor WYSIWYG. Data pendukung (judul, kategori, tanggal, penulis,
+  // ringkasan, gambar, galeri) menempati kolom kiri.
+  const isNews = activeTab === 'news'
+  const newsInfoFields = isNews
+    ? (CONTENT_FIELDS.news || []).filter((f) => f.name !== 'content')
+    : []
 
   // Id stabil per kolom supaya <label> bisa dihubungkan ke input-nya
   // (`htmlFor`/`id`). Tanpa itu pembaca layar hanya membaca label tanpa
@@ -263,11 +237,19 @@ export function CrudFormDialog({
   // supaya tidak ada setengah baris yang kosong (lihat computeSpans).
   const contentFields = CONTENT_FIELDS[activeTab] || []
   const contentSpans = computeSpans(contentFields, (f) => f.type === 'textarea' || f.type === 'list' || f.type === 'parent')
-  const infoSpans = computeSpans(fields, (f) => activeTab === 'social' && f.name === 'path')
+  // Tidak ada lagi field "\"menembang\"" (wide) di dialog generik — tab social
+  // yang dulu butuh itu kini memakai `SocialFormDialog` tersendiri. Perilaku
+  // pairing grid (field terakhir dari run ganjil membentang) tetap berlaku.
+  const infoSpans = computeSpans(fields, () => false)
 
   return (
     <Dialog open onOpenChange={(val) => { if (!val) void requestClose() }}>
-      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl border-white/70 bg-[var(--bg-elevated)]/95 p-0 shadow-[0_24px_80px_-24px_rgba(15,60,40,0.45)] backdrop-blur-xl sm:rounded-2xl">
+      <DialogContent
+        className={cn(
+          'flex max-h-[92vh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden rounded-2xl border-white/70 bg-[var(--bg-elevated)]/95 p-0 shadow-[0_24px_80px_-24px_rgba(15,60,40,0.45)] backdrop-blur-xl sm:rounded-2xl',
+          isNews ? 'max-w-6xl h-[92vh]' : 'max-w-2xl',
+        )}
+      >
         {/* ── Header ── */}
         <div className="relative shrink-0 overflow-hidden border-b border-[var(--border)]/70 bg-gradient-to-r from-[var(--accent-subtle)] via-white/50 to-[var(--accent-gold)]/10 px-5 py-4 sm:px-6 sm:py-5">
           <div className="pointer-events-none absolute -top-10 -right-8 h-28 w-28 rounded-full bg-[var(--accent-gold)]/20 blur-2xl" />
@@ -287,7 +269,155 @@ export function CrudFormDialog({
         </div>
 
         {/* ── Body ── */}
-        <div className="modal-scroll flex-1 space-y-5 overflow-y-auto bg-[var(--bg-secondary)]/35 px-5 py-5 sm:px-6">
+        <div
+          className={cn(
+            'flex-1 min-h-0 bg-[var(--bg-secondary)]/35',
+            isNews
+              ? 'overflow-y-auto lg:overflow-hidden p-4 sm:p-5 lg:p-6'
+              : 'modal-scroll overflow-y-auto space-y-5 px-5 py-5 sm:px-6',
+          )}
+        >
+          {isNews ? (
+            // Berita: data pendukung di kiri (scroll sendiri), isi artikel di kanan (editor independen).
+            <div className="grid h-full min-h-0 grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+              {/* Kolom kiri: data pendukung + gambar utama + galeri foto */}
+              <div className="news-scroll-pane h-full min-h-0 space-y-5 overflow-y-auto overscroll-contain pr-2">
+                <FormSection label="Informasi Berita" icon={ListChecks}>
+                  <div className="space-y-4">
+                    {newsInfoFields.map((f) => {
+                      const key = `_c_${f.name}`
+                      const error = fieldErrors[key]
+                      return (
+                        <Field
+                          key={f.name}
+                          label={f.label}
+                          htmlFor={contentFieldId(f.name)}
+                          required={f.name === 'title'}
+                          wide
+                        >
+                          {f.type === 'textarea' ? (
+                            <Textarea
+                              id={contentFieldId(f.name)}
+                              ref={(el) => { fieldRefs.current[key] = el }}
+                              className={cn(TEXTAREA_CLASS, error && FIELD_ERROR_CLASS)}
+                              error={error}
+                              value={String(formData[key] ?? '')}
+                              onChange={(e) => {
+                                setFormData({ ...formData, [key]: e.target.value })
+                                clearFieldError(key)
+                              }}
+                              rows={4}
+                            />
+                          ) : (
+                            <Input
+                              id={contentFieldId(f.name)}
+                              ref={(el) => { fieldRefs.current[key] = el }}
+                              className={cn(FIELD_CLASS, error && FIELD_ERROR_CLASS)}
+                              error={error}
+                              type="text"
+                              value={String(formData[key] ?? '')}
+                              onChange={(e) => {
+                                setFormData({ ...formData, [key]: e.target.value })
+                                clearFieldError(key)
+                              }}
+                            />
+                          )}
+                        </Field>
+                      )
+                    })}
+                  </div>
+                </FormSection>
+
+                <FormSection label="Publikasi" icon={CalendarDays}>
+                  <div className="space-y-4">
+                    {fields.map((f) => (
+                      <Field
+                        key={f.name}
+                        label={f.label}
+                        htmlFor={fieldId(f.name)}
+                        required={f.required}
+                        wide
+                      >
+                        {f.type === 'select' ? (
+                          <select
+                            id={fieldId(f.name)}
+                            ref={(el) => { fieldRefs.current[f.name] = el }}
+                            aria-invalid={!!fieldErrors[f.name]}
+                            className={cn(SELECT_CLASS, fieldErrors[f.name] && FIELD_ERROR_CLASS)}
+                            value={String(formData[f.name] ?? '')}
+                            onChange={(e) => {
+                              setFormData({ ...formData, [f.name]: e.target.value })
+                              clearFieldError(f.name)
+                            }}
+                          >
+                            <option value="">— Pilih {f.label} —</option>
+                            {(f.options ?? []).map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                            {/* Kategori lama di luar daftar statis tetap
+                                ditampilkan agar tidak hilang saat disunting. */}
+                            {(() => {
+                              const current = String(formData[f.name] ?? '')
+                              return current && !(f.options ?? []).includes(current)
+                                ? <option value={current}>{current}</option>
+                                : null
+                            })()}
+                          </select>
+                        ) : (
+                          <Input
+                            id={fieldId(f.name)}
+                            ref={(el) => { fieldRefs.current[f.name] = el }}
+                            className={cn(FIELD_CLASS, fieldErrors[f.name] && FIELD_ERROR_CLASS)}
+                            error={fieldErrors[f.name]}
+                            type={f.type === 'date' ? 'date' : 'text'}
+                            maxLength={maxLengthFor(f.name)}
+                            value={String(formData[f.name] ?? '')}
+                            onChange={(e) => {
+                              setFormData({ ...formData, [f.name]: e.target.value })
+                              clearFieldError(f.name)
+                            }}
+                          />
+                        )}
+                        {f.type === 'select' && fieldErrors[f.name] && (
+                          <p className="mt-1.5 text-xs font-medium text-destructive">{fieldErrors[f.name]}</p>
+                        )}
+                      </Field>
+                    ))}
+                  </div>
+                </FormSection>
+
+                <ImageSection
+                  value={formData.image ?? ''}
+                  onChange={(url) => setFormData({ ...formData, image: url })}
+                />
+
+                <GallerySection
+                  value={formData.gallery ?? []}
+                  onChange={(urls) => setFormData({ ...formData, gallery: urls })}
+                />
+              </div>
+
+              {/* Kolom kanan: editor berita independen (Toolbar & Header diam, hanya area tulis yang scroll jika melebihi tinggi) */}
+              <div className="h-full min-h-0 flex flex-col overflow-hidden">
+                <FormSection
+                  label="Isi Berita"
+                  icon={FileText}
+                  hint="Editor teks kaya"
+                  className="h-full flex flex-col min-h-0"
+                  contentClassName="flex-1 min-h-0 flex flex-col p-3 sm:p-4"
+                >
+                  <RichTextEditor
+                    id={contentFieldId('content')}
+                    value={String(formData['_c_content'] ?? '')}
+                    onChange={(html) => setFormData({ ...formData, _c_content: html })}
+                    placeholder="Tulis isi berita di sini…"
+                    className="h-full flex flex-col min-h-0"
+                  />
+                </FormSection>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* ── Detail Konten ── */}
           {HAS_CONTENT.includes(activeTab) && (
             <FormSection label="Detail Konten" icon={FileText}>
@@ -343,125 +473,17 @@ export function CrudFormDialog({
           )}
 
           {/* ── Gambar ── */}
-          {activeTab !== 'social' && !NO_IMAGE_TABS.includes(activeTab) && (
-            <FormSection label="Gambar Utama" icon={ImageIcon} tone="gold">
-              <div className="space-y-3.5">
-                <ModeToggle mode={imageMode} onMode={setImageMode} />
-
-                {imageMode === 'upload' ? (
-                  <label className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-[var(--border)] bg-white/60 px-4 py-7 text-center transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60">
-                    <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] transition-transform group-hover:scale-105">
-                      {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-                    </span>
-                    <span className="text-sm font-semibold text-[var(--text)]">
-                      {uploading ? 'Mengunggah…' : 'Klik untuk pilih gambar'}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)]">PNG, JPG, atau WEBP</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploading} />
-                  </label>
-                ) : (
-                  <div className="relative">
-                    <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                    <Input
-                      className={cn(FIELD_CLASS, 'pl-9')}
-                      type="url"
-                      value={formData.image ?? ''}
-                      onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                      placeholder="https://example.com/image.jpg"
-                    />
-                  </div>
-                )}
-
-                {formData.image && (
-                  <div className="flex items-start gap-3.5 rounded-2xl border border-[var(--border)]/70 bg-white/70 p-3">
-                    <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-                      <Image
-                        src={formData.image} alt="Pratinjau gambar" width={96} height={64}
-                        className="h-full w-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 pt-0.5">
-                      <p className="text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">Pratinjau</p>
-                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed break-all text-[var(--text-secondary)]">{formData.image}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, image: '' })}
-                      className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
-                      aria-label="Hapus URL gambar"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </FormSection>
-          )}
+          <ImageSection
+            value={formData.image ?? ''}
+            onChange={(url) => setFormData({ ...formData, image: url })}
+          />
 
           {/* ── Galeri ── */}
           {activeTab === 'news' && (
-            <FormSection
-              label="Galeri"
-              icon={Images}
-              tone="gold"
-              hint={galleryCount > 0 ? `${galleryCount} gambar` : 'Belum ada gambar'}
-            >
-              <div className="space-y-3.5">
-                {galleryCount > 0 && (
-                  <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
-                    {(formData.gallery || []).map((url: string, idx: number) => (
-                      <div key={idx} className="group relative aspect-4/3 overflow-hidden rounded-xl border border-[var(--border)]/70 bg-[var(--bg-secondary)]">
-                        <Image
-                          src={url} alt={`Galeri ${idx + 1}`} width={160} height={120}
-                          className="h-full w-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                        />
-                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                        <button
-                          type="button" onClick={() => removeGalleryItem(idx)}
-                          className="absolute top-1.5 right-1.5 rounded-lg bg-white/90 p-1.5 text-[var(--text-secondary)] shadow-sm transition-all hover:bg-red-50 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                          aria-label={`Hapus gambar ${idx + 1}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <ModeToggle mode={galleryInputMode} onMode={setGalleryInputMode} />
-                {galleryInputMode === 'upload' ? (
-                  <label className="group inline-flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-[var(--border)] bg-white/60 px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60 hover:text-[var(--text)]">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)]">
-                      {galleryUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    </span>
-                    {galleryUploading ? 'Mengunggah…' : 'Tambah dari file'}
-                    <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" disabled={galleryUploading} />
-                  </label>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <Input
-                        className={cn(FIELD_CLASS, 'pl-9')}
-                        type="url" value={galleryInputValue}
-                        onChange={(e) => setGalleryInputValue(e.target.value)}
-                        placeholder="https://example.com/image.jpg"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addGalleryItem(galleryInputValue)}
-                      disabled={!galleryInputValue.trim()}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-sm transition-all hover:bg-[var(--accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Tambah galeri"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </FormSection>
+            <GallerySection
+              value={formData.gallery ?? []}
+              onChange={(urls) => setFormData({ ...formData, gallery: urls })}
+            />
           )}
 
           {/* ── Informasi Utama ── */}
@@ -476,44 +498,7 @@ export function CrudFormDialog({
                     required={f.required}
                     wide={infoSpans[idx]}
                   >
-                    {activeTab === 'social' && f.name === 'path' ? (
-                      <div className="space-y-3 pt-1">
-                        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                          {SOCIAL_PRESETS.map((preset) => (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              onClick={() => setFormData({ ...formData, [f.name]: preset.path })}
-                              className={cn(
-                                'flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition-all',
-                                formData[f.name] === preset.path
-                                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
-                                  : 'border-border bg-white/60 hover:border-primary/50 hover:bg-primary/5',
-                              )}
-                              title={preset.label}
-                            >
-                              <svg className="h-6 w-6 text-foreground" viewBox="0 0 24 24" fill="currentColor">
-                                <path d={preset.path} />
-                              </svg>
-                              <span className="w-full truncate text-center text-[10px] leading-tight text-muted-foreground">
-                                {preset.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                        {/* `path` is NOT NULL on the column, so a row saved
-                            without one is rejected with a 422. A preset-only
-                            picker made custom icons impossible and turned that
-                            rejection into a dead end -- keep free text open. */}
-                        <Textarea
-                          className={TEXTAREA_CLASS}
-                          value={String(formData[f.name] ?? '')}
-                          onChange={(e) => setFormData({ ...formData, [f.name]: e.target.value })}
-                          rows={3}
-                          placeholder="M12 2c2.717 0 3.056..."
-                        />
-                      </div>
-                    ) : f.type === 'textarea' ? (
+                    {f.type === 'textarea' ? (
                       <Textarea
                         id={fieldId(f.name)}
                         ref={(el) => { fieldRefs.current[f.name] = el }}
@@ -527,6 +512,29 @@ export function CrudFormDialog({
                         rows={4}
                         maxLength={10000}
                       />
+                    ) : f.type === 'select' ? (
+                      <select
+                        id={fieldId(f.name)}
+                        ref={(el) => { fieldRefs.current[f.name] = el }}
+                        aria-invalid={!!fieldErrors[f.name]}
+                        className={cn(SELECT_CLASS, fieldErrors[f.name] && FIELD_ERROR_CLASS)}
+                        value={String(formData[f.name] ?? '')}
+                        onChange={(e) => {
+                          setFormData({ ...formData, [f.name]: e.target.value })
+                          clearFieldError(f.name)
+                        }}
+                      >
+                        <option value="">— Pilih {f.label} —</option>
+                        {(f.options ?? []).map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                        {(() => {
+                          const current = String(formData[f.name] ?? '')
+                          return current && !(f.options ?? []).includes(current)
+                            ? <option value={current}>{current}</option>
+                            : null
+                        })()}
+                      </select>
                     ) : (
                       <Input
                         id={fieldId(f.name)}
@@ -546,6 +554,8 @@ export function CrudFormDialog({
                 ))}
               </div>
             </FormSection>
+          )}
+            </>
           )}
         </div>
 
@@ -607,18 +617,20 @@ function computeSpans<T>(items: T[], isWide: (item: T) => boolean): boolean[] {
   return spans
 }
 
-function FormSection({
-  label, icon: Icon, tone = 'emerald', hint, children,
+export function FormSection({
+  label, icon: Icon, tone = 'emerald', hint, className, contentClassName, children,
 }: {
   label: string
   icon: LucideIcon
   tone?: 'emerald' | 'gold'
   hint?: string
+  className?: string
+  contentClassName?: string
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-white/85 shadow-[0_1px_3px_rgba(15,60,40,0.05)]">
-      <div className="flex items-center gap-2.5 border-b border-[var(--border)]/60 bg-[var(--bg-secondary)]/45 px-4 py-2.5">
+    <section className={cn('overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-white/85 shadow-[0_1px_3px_rgba(15,60,40,0.05)]', className)}>
+      <div className="shrink-0 flex items-center gap-2.5 border-b border-[var(--border)]/60 bg-[var(--bg-secondary)]/45 px-4 py-2.5">
         <span
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded-lg',
@@ -630,12 +642,12 @@ function FormSection({
         <span className="text-[11px] font-semibold tracking-[0.14em] text-[var(--text-secondary)] uppercase">{label}</span>
         {hint && <span className="ml-auto text-[11px] text-[var(--text-muted)]">{hint}</span>}
       </div>
-      <div className="p-4 sm:p-5">{children}</div>
+      <div className={cn('p-4 sm:p-5', contentClassName)}>{children}</div>
     </section>
   )
 }
 
-function Field({
+export function Field({
   label, htmlFor, required, wide, children,
 }: {
   label: string
@@ -681,5 +693,185 @@ function ModeToggle({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * Unggah/pilih satu gambar utama. Upload hanya menaruh file di storage;
+ * datanya baru tersimpan saat admin menekan "Simpan" (lihat pesan toast).
+ */
+function ImageSection({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const [mode, setMode] = useState<'upload' | 'url'>('upload')
+  const [uploading, setUploading] = useState(false)
+
+  async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const url = await api.uploadImage(file)
+      onChange(url)
+      toast('success', 'Gambar diunggah — tekan Simpan untuk menyimpan')
+    } catch (e) {
+      toast('error', 'Upload gagal: ' + errorMessage(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <FormSection label="Gambar Utama" icon={ImageIcon} tone="gold">
+      <div className="space-y-3.5">
+        <ModeToggle mode={mode} onMode={setMode} />
+
+        {mode === 'upload' ? (
+          <label className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-[var(--border)] bg-white/60 px-4 py-7 text-center transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60">
+            <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] transition-transform group-hover:scale-105">
+              {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+            </span>
+            <span className="text-sm font-semibold text-[var(--text)]">
+              {uploading ? 'Mengunggah…' : 'Klik untuk pilih gambar'}
+            </span>
+            <span className="text-xs text-[var(--text-muted)]">PNG, JPG, atau WEBP</span>
+            <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+          </label>
+        ) : (
+          <div className="relative">
+            <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Input
+              className={cn(FIELD_CLASS, 'pl-9')}
+              type="url"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="https://example.com/image.jpg"
+            />
+          </div>
+        )}
+
+        {value && (
+          <div className="flex items-start gap-3.5 rounded-2xl border border-[var(--border)]/70 bg-white/70 p-3">
+            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+              <Image
+                src={value} alt="Pratinjau gambar" width={96} height={64}
+                className="h-full w-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">Pratinjau</p>
+              <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed break-all text-[var(--text-secondary)]">{value}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
+              aria-label="Hapus URL gambar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </FormSection>
+  )
+}
+
+/** Galeri tambahan artikel berita (upload banyak gambar atau tempel URL). */
+function GallerySection({ value, onChange }: { value: string[]; onChange: (urls: string[]) => void }) {
+  const [mode, setMode] = useState<'upload' | 'url'>('upload')
+  const [inputValue, setInputValue] = useState('')
+  const [uploading, setUploading] = useState(false)
+
+  const images = Array.isArray(value) ? value : []
+
+  async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const url = await api.uploadImage(file)
+      onChange([...images, url])
+      toast('success', 'Gambar ditambahkan ke galeri — tekan Simpan untuk menyimpan')
+    } catch (e) {
+      toast('error', 'Upload gagal: ' + errorMessage(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function addItem(url: string) {
+    if (!url.trim()) return
+    onChange([...images, url.trim()])
+    setInputValue('')
+  }
+
+  function removeItem(index: number) {
+    const updated = [...images]
+    updated.splice(index, 1)
+    onChange(updated)
+  }
+
+  return (
+    <FormSection
+      label="Galeri Foto Berita"
+      icon={Images}
+      tone="gold"
+      hint={images.length > 0 ? `${images.length} gambar` : 'Belum ada gambar'}
+    >
+      <div className="space-y-3.5">
+        {images.length > 0 && (
+          <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
+            {images.map((url, idx) => (
+              <div key={`${url}-${idx}`} className="group relative aspect-4/3 overflow-hidden rounded-xl border border-[var(--border)]/70 bg-[var(--bg-secondary)]">
+                <Image
+                  src={url} alt={`Galeri ${idx + 1}`} width={160} height={120}
+                  className="h-full w-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <button
+                  type="button" onClick={() => removeItem(idx)}
+                  className="absolute top-1.5 right-1.5 rounded-lg bg-white/90 p-1.5 text-[var(--text-secondary)] shadow-sm transition-all hover:bg-red-50 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                  aria-label={`Hapus gambar ${idx + 1}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <ModeToggle mode={mode} onMode={setMode} />
+        {mode === 'upload' ? (
+          <label className="group inline-flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-[var(--border)] bg-white/60 px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-subtle)]/60 hover:text-[var(--text)]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)]">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            </span>
+            {uploading ? 'Mengunggah…' : 'Tambah dari file'}
+            <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+          </label>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Link2 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+              <Input
+                className={cn(FIELD_CLASS, 'pl-9')}
+                type="url" value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => addItem(inputValue)}
+              disabled={!inputValue.trim()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-sm transition-all hover:bg-[var(--accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Tambah galeri"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </FormSection>
   )
 }

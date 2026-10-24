@@ -8,7 +8,8 @@ import { useSSE } from '@/app/hooks/useSSE'
 import AdminToast, { toast } from '@/app/components/ui/AdminToast'
 import AdminConfirm from '@/app/components/ui/AdminConfirm'
 import {
-  Plus, Settings, LayoutDashboard, Loader2, FolderOpen, Pencil, Trash2,
+  Plus, Settings, LayoutDashboard, Loader2, FolderOpen, Pencil, Trash2, Search, X, RefreshCw,
+  Link as LinkIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ProfileModal from '@/app/components/ProfileModal'
@@ -33,6 +34,23 @@ import { StaffOrgChart } from '@/app/components/staff/StaffOrgChart'
 import { SettingsEditor } from './SettingsEditor'
 import { ContactEditor } from './ContactEditor'
 import { CrudFormDialog } from './CrudFormDialog'
+import { FacilityFormDialog } from './facilities/FacilityFormDialog'
+import { StaffFormDialog } from './staff/StaffFormDialog'
+import { TestimonialFormDialog } from './testimonials/TestimonialFormDialog'
+import { AchievementFormDialog } from './achievements/AchievementFormDialog'
+import { AchievementTable } from './achievements/AchievementTable'
+import { GalleryFormDialog } from './gallery/GalleryFormDialog'
+import { SocialFormDialog } from './social/SocialFormDialog'
+import { SocialLinkList } from './social/SocialLinkList'
+import {
+  nextTestimonialOrder,
+  testimonialQuoteFromContent,
+} from './testimonials/testimonial-form'
+import { resolveImageSrc } from '@/app/lib/image-file'
+import {
+  GALLERY_CATEGORY_OPTIONS,
+  galleryCategoryLabel,
+} from '@/app/lib/gallery-categories'
 import {
   TABS, TABLE_COLS, FORM_FIELDS, CONTENT_FIELDS, sortRowsByOrder,
 } from './_constants'
@@ -48,13 +66,9 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
   achievements: 'Catat raihan dan penghargaan santri.',
   gallery: 'Kelola dokumentasi foto kegiatan pesantren.',
   testimonials: 'Kelola kesan dan testimoni wali santri.',
-  social: 'Atur tautan media sosial resmi pesantren.',
-  contact: 'Perbarui informasi kontak pesantren.',
+  social: 'Kelola tautan media sosial dan kanal komunikasi resmi yang ditampilkan pada website.',
+  contact: 'Kelola informasi kontak, alamat, dan lokasi resmi yang ditampilkan pada website.',
   settings: 'Konfigurasi logo, favicon, dan pengaturan situs.',
-  'ppdb-jalur': 'Kelola kartu jalur pendaftaran di halaman PPDB.',
-  'ppdb-pillars': 'Kelola kartu pilar kurikulum di halaman PPDB.',
-  'ppdb-steps': 'Kelola langkah alur pendaftaran di halaman PPDB.',
-  'ppdb-copy': 'Teks judul seksi & banner CTA di halaman PPDB.',
 }
 
 // ─── Skeleton ───────────────────────────────────────────────
@@ -124,6 +138,14 @@ function formatDateLabel(raw: string): string {
   const parsed = new Date(raw)
   if (Number.isNaN(parsed.getTime())) return raw
   return parsed.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/**
+ * Kutipan testimoni untuk pencarian & pratinjau tabel. Sumber utamanya
+ * `content.quote`; data lama menyimpan teks di `content.text`.
+ */
+function testimonialQuoteOf(item: RowRecord): string {
+  return testimonialQuoteFromContent(item.content as Record<string, unknown> | null | undefined)
 }
 
 /**
@@ -212,6 +234,29 @@ export default function AdminDashboard() {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('news')
   const [profileOpen, setProfileOpen] = useState(false)
+  // Filter pencarian (Testimoni & Galeri) dikunci pada tab asalnya: begitu
+  // admin pindah tab, filter otomatis dianggap kosong. Pola derived-state ini
+  // menghindari useEffect yang memanggil setState (cascading render).
+  const [tabFilters, setTabFilters] = useState<{
+    tab: string
+    query: string
+    galleryCategory: string
+  }>(() => ({ tab: 'news', query: '', galleryCategory: '' }))
+  const searchQuery = tabFilters.tab === activeTab ? tabFilters.query : ''
+  const galleryCategoryFilter =
+    tabFilters.tab === activeTab ? tabFilters.galleryCategory : ''
+
+  function setSearchQuery(query: string) {
+    setTabFilters((prev) => ({ ...prev, tab: activeTab, query }))
+  }
+
+  function setGalleryCategoryFilter(galleryCategory: string) {
+    setTabFilters((prev) => ({ ...prev, tab: activeTab, galleryCategory }))
+  }
+
+  function resetGalleryFilters() {
+    setTabFilters((prev) => ({ ...prev, tab: activeTab, query: '', galleryCategory: '' }))
+  }
 
   // ── Data state ────────────────────────────────────────────────────────────
   const [items, setItems] = useState<RowRecord[]>([])
@@ -418,6 +463,24 @@ export default function AdminDashboard() {
     const fd: FormState = {}
     for (const f of FORM_FIELDS[activeTab] || []) fd[f.name] = ''
     for (const f of CONTENT_FIELDS[activeTab] || []) fd[`_c_${f.name}`] = ''
+    // Berita baru langsung terisi tanggal hari ini supaya admin tidak perlu
+    // memilih ulang untuk artikel yang terbit sekarang.
+    if (activeTab === 'news') {
+      const now = new Date()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      fd.date = `${now.getFullYear()}-${month}-${day}`
+    }
+    // Urutan testimoni baru mengikuti data yang sudah ada, bukan angka tetap,
+    // supaya entri baru tidak menyalip atau menabrak urutan yang sudah diatur.
+    if (activeTab === 'testimonials') {
+      fd.order = nextTestimonialOrder(items)
+    }
+    // Tahun prestasi baru langsung terisi tahun berjalan agar admin tidak perlu
+    // mengetik ulang untuk prestasi tahun ini, namun tetap mudah diubah.
+    if (activeTab === 'achievements') {
+      fd.year = new Date().getFullYear()
+    }
     fd.image = ''
     fd.gallery = []
     setFormData(fd)
@@ -442,6 +505,11 @@ export default function AdminDashboard() {
     let rawGallery = item.gallery
     if (typeof rawGallery === 'string') try { rawGallery = JSON.parse(rawGallery) } catch { /* ignore */ }
     fd.gallery = Array.isArray(rawGallery) ? rawGallery as string[] : []
+    // Testimoni lama dapat menyimpan kutipan di `content.text`; form selalu
+    // memakai `content.quote`, jadi fallback-nya dibaca di sini.
+    if (activeTab === 'testimonials') {
+      fd._c_quote = testimonialQuoteFromContent(content)
+    }
     setFormData(fd)
     setEditingItem(item)
     setFormMode('edit')
@@ -507,6 +575,46 @@ export default function AdminDashboard() {
     () => sortRowsByOrder(activeTab, items),
     [activeTab, items],
   )
+
+  // Pencarian Testimoni & Galeri hanya menyaring baris yang sudah dimuat
+  // (tanpa mengubah endpoint/parameter API). Tab lain memakai tabel apa adanya.
+  const visibleItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (activeTab === 'testimonials') {
+      if (!query) return orderedItems
+      return orderedItems.filter((item) =>
+        [item.name, item.child, testimonialQuoteOf(item)]
+          .filter((value): value is string => typeof value === 'string')
+          .some((value) => value.toLowerCase().includes(query)),
+      )
+    }
+    if (activeTab === 'gallery') {
+      return orderedItems.filter((item) => {
+        if (galleryCategoryFilter) {
+          // Kategori standar difilter dengan label; kategori custom lama
+          // dicocokkan persis apa adanya supaya tidak "hilang" dari filter.
+          if (String(item.category ?? '').trim() !== galleryCategoryFilter) return false
+        }
+        if (!query) return true
+        return [item.content?.title, item.category]
+          .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+          .some((value) => value.toLowerCase().includes(query))
+      })
+    }
+    return orderedItems
+  }, [activeTab, orderedItems, searchQuery, galleryCategoryFilter])
+
+  // Opsi filter kategori galeri: kategori standar + nilai lama yang dipakai
+  // datanya (agar custom lama tetap bisa difilter) — tanpa duplikat.
+  const galleryCategoryOptions = useMemo(() => {
+    const used = new Set<string>()
+    for (const item of orderedItems) {
+      const category = String(item.category ?? '').trim()
+      if (category) used.add(galleryCategoryLabel(category))
+    }
+    const standard = GALLERY_CATEGORY_OPTIONS.map((option) => option.value)
+    return [...standard, ...[...used].filter((value) => !standard.includes(value))]
+  }, [orderedItems])
 
   // Kolom tabel: `title` + `subtitle` digabung jadi satu sel utama
   // (thumbnail + judul + baris kecil), kolom sisanya dirender sesuai `variant`.
@@ -596,26 +704,39 @@ export default function AdminDashboard() {
                 {activeTab !== 'settings' && activeTab !== 'contact' && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3.5 py-1.5 text-xs font-semibold" title="Jumlah item">
                     <FolderOpen className="h-3.5 w-3.5" />
-                    {items.length} item
+                    {(activeTab === 'testimonials' || activeTab === 'gallery') ? visibleItems.length : items.length} item
                   </span>
                 )}
-                {canCrud && activeTab !== 'settings' && activeTab !== 'contact' && !(activeTab === 'ppdb-copy' && items.length > 0) && (
+                {canCrud && activeTab !== 'settings' && activeTab !== 'contact' && (
                   <button
                     onClick={openCreate}
                     className="inline-flex items-center gap-2 rounded-xl bg-white/95 hover:bg-white text-emerald-900 px-4 py-2.5 text-sm font-semibold shadow-md transition-all duration-200"
                   >
                     <Plus className="w-4 h-4" />
-                    Buat Baru
+                    {activeTab === 'testimonials'
+                      ? 'Tambah Testimoni'
+                      : activeTab === 'gallery'
+                        ? 'Tambah Foto'
+                        : activeTab === 'social'
+                          ? 'Tambah Tautan Sosial'
+                          : 'Buat Baru'}
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Error */}
+          {/* Error + retry */}
           {error && (
-            <div className="mb-5 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-medium">
-              {error}
+            <div className="mb-5 flex flex-col gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 sm:flex-row sm:items-center sm:justify-between">
+              <span>{error}</span>
+              <button
+                onClick={fetchData}
+                className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 sm:self-auto"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Coba Lagi
+              </button>
             </div>
           )}
 
@@ -635,30 +756,171 @@ export default function AdminDashboard() {
           {activeTab === 'settings' && !loading && items.length === 0 && (
             <EmptyState icon={Settings} title="Belum Ada Pengaturan" description="Tidak ada pengaturan yang tersedia." />
           )}
-          {activeTab !== 'settings' && !loading && !error && items.length === 0 && (
+          {activeTab !== 'settings' && activeTab !== 'contact' && !loading && !error && items.length === 0 && (
             <EmptyState
-              icon={LayoutDashboard}
-              title="Belum Ada Data"
+              icon={activeTab === 'social' ? LinkIcon : LayoutDashboard}
+              title={activeTab === 'social' ? 'Belum Ada Tautan Sosial' : 'Belum Ada Data'}
               description={
-                activeTab === 'contact'
-                  ? 'Info kontak belum diatur.'
+                activeTab === 'social'
+                  ? 'Tambahkan Instagram, YouTube, WhatsApp, dan kanal resmi lainnya agar mudah diakses pengunjung lewat footer dan halaman Kontak.'
+                  : activeTab === 'testimonials'
+                  ? canCrud
+                    ? 'Belum ada testimoni. Tambahkan kesan wali santri agar halaman publik lebih hidup.'
+                    : 'Belum ada testimoni.'
                   : canCrud
                     ? 'Belum ada item di sini. Klik "Buat Baru" untuk memulai.'
                     : 'Belum ada item di sini.'
               }
               action={
-                canCrud && activeTab !== 'contact' ? (
+                canCrud ? (
                   <button
                     onClick={openCreate}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:bg-[var(--accent)]/90 shadow-md transition-all"
                   >
                     <Plus className="w-4 h-4" />
-                    Buat Baru
+                    {activeTab === 'testimonials'
+                      ? 'Tambah Testimoni'
+                      : activeTab === 'gallery'
+                        ? 'Tambah Foto'
+                        : activeTab === 'social'
+                          ? 'Tambah Tautan Sosial'
+                          : 'Buat Baru'}
                   </button>
                 ) : undefined
               }
             />
           )}
+
+          {/* Toolbar pencarian Testimoni */}
+          {activeTab === 'testimonials' && !loading && !error && items.length > 0 && (
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-sm">
+                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Cari nama wali, anak, atau kutipan…"
+                  aria-label="Cari testimoni"
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-white/90 pr-9 pl-9 text-sm text-[var(--text)] transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Hapus pencarian"
+                    className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text)]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+              <p className="text-xs text-[var(--text-muted)]" role="status" aria-live="polite">
+                {searchQuery.trim()
+                  ? `Menampilkan ${visibleItems.length} dari ${items.length} testimoni yang dimuat`
+                  : `${items.length} testimoni dimuat`}
+              </p>
+            </div>
+          )}
+
+          {/* Toolbar pencarian & filter Galeri */}
+          {activeTab === 'gallery' && !loading && !error && items.length > 0 && (
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex w-full flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Cari judul atau kategori foto…"
+                    aria-label="Cari foto galeri"
+                    className="h-10 w-full rounded-xl border border-[var(--border)] bg-white/90 pr-9 pl-9 text-sm text-[var(--text)] transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none"
+                  />
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      aria-label="Hapus pencarian"
+                      className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text)]"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+                <select
+                  value={galleryCategoryFilter}
+                  onChange={(event) => setGalleryCategoryFilter(event.target.value)}
+                  aria-label="Filter kategori galeri"
+                  className="h-10 rounded-xl border border-[var(--border)] bg-white/90 px-3 text-sm text-[var(--text)] transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none"
+                >
+                  <option value="">Semua kategori</option>
+                  {galleryCategoryOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                {(searchQuery || galleryCategoryFilter) && (
+                  <button
+                    type="button"
+                    onClick={resetGalleryFilters}
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text)]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Reset
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)]" role="status" aria-live="polite">
+                {searchQuery.trim() || galleryCategoryFilter
+                  ? `Menampilkan ${visibleItems.length} dari ${items.length} foto yang dimuat`
+                  : `${items.length} foto dimuat`}
+              </p>
+            </div>
+          )}
+
+          {/* Tidak ada hasil filter Galeri */}
+          {activeTab === 'gallery' &&
+            !loading &&
+            !error &&
+            items.length > 0 &&
+            visibleItems.length === 0 && (
+              <EmptyState
+                icon={Search}
+                title="Foto Tidak Ditemukan"
+                description="Tidak ada foto yang cocok dengan pencarian atau filter kategori ini. Coba kata kunci atau kategori lain."
+                action={
+                  <button
+                    onClick={resetGalleryFilters}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--bg-secondary)]"
+                  >
+                    <X className="w-4 h-4" />
+                    Hapus Filter
+                  </button>
+                }
+              />
+            )}
+
+          {/* Tidak ada hasil pencarian Testimoni */}
+          {activeTab === 'testimonials' &&
+            !loading &&
+            !error &&
+            items.length > 0 &&
+            visibleItems.length === 0 && (
+              <EmptyState
+                icon={Search}
+                title="Testimoni Tidak Ditemukan"
+                description={`Tidak ada testimoni yang cocok dengan "${searchQuery.trim()}". Coba kata kunci lain.`}
+                action={
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--bg-secondary)]"
+                  >
+                    <X className="w-4 h-4" />
+                    Hapus Pencarian
+                  </button>
+                }
+              />
+            )}
 
           {/* Settings tab */}
           {activeTab === 'settings' && !loading && (
@@ -685,8 +947,31 @@ export default function AdminDashboard() {
             </Card>
           )}
 
+          {/* Achievement Table */}
+          {activeTab === 'achievements' && !loading && items.length > 0 && (
+            <AchievementTable
+              items={orderedItems}
+              canCrud={canCrud}
+              detailLoading={detailLoading}
+              onEdit={(item) => void openEdit(item)}
+              onDelete={handleDelete}
+            />
+          )}
+
+          {/* Daftar Tautan Sosial (kartu, bukan tabel besar — data tipis:
+              ikon + label + URL + 2 aksi). */}
+          {activeTab === 'social' && !loading && visibleItems.length > 0 && (
+            <SocialLinkList
+              items={visibleItems}
+              canCrud={canCrud}
+              detailLoading={detailLoading}
+              onEdit={(item) => void openEdit(item)}
+              onDelete={handleDelete}
+            />
+          )}
+
           {/* Table Data */}
-          {activeTab !== 'settings' && activeTab !== 'contact' && !loading && items.length > 0 && (
+          {activeTab !== 'settings' && activeTab !== 'contact' && activeTab !== 'achievements' && activeTab !== 'social' && !loading && visibleItems.length > 0 && (
             <Card className="overflow-hidden rounded-2xl border-border/70 bg-white/70 shadow-[0_18px_50px_-30px_rgba(26,107,71,0.35)] backdrop-blur-sm">
               <div className="overflow-x-auto no-scrollbar">
                 <Table>
@@ -714,7 +999,7 @@ export default function AdminDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orderedItems.map((item) => {
+                    {visibleItems.map((item) => {
                       const titleValue = titleCol ? toText(titleCol.accessor(item)) : ''
                       const subtitleValue = subtitleCol ? toText(subtitleCol.accessor(item)) : ''
                       return (
@@ -725,10 +1010,14 @@ export default function AdminDashboard() {
                           <TableCell className="max-w-[320px] px-5 py-3.5 align-middle">
                             <div className="flex items-center gap-3">
                               <RowThumb
-                                url={typeof item.image === 'string' && item.image ? item.image : undefined}
+                                url={
+                                  typeof item.image === 'string' && item.image
+                                    ? resolveImageSrc(item.image, api.API_BASE)
+                                    : undefined
+                                }
                                 label={titleValue}
                                 icon={activeTabDef.icon}
-                                round={activeTab === 'staff'}
+                                round={activeTab === 'staff' || activeTab === 'testimonials'}
                               />
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-[var(--text)]" title={titleValue || undefined}>
@@ -765,7 +1054,6 @@ export default function AdminDashboard() {
                                     : <Pencil className="h-3.5 w-3.5" />}
                                   Edit
                                 </Button>
-                                {activeTab !== 'ppdb-copy' && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -794,7 +1082,6 @@ export default function AdminDashboard() {
                                   <Trash2 className="h-3.5 w-3.5" />
                                   Hapus
                                 </Button>
-                                )}
                               </div>
                             </TableCell>
                           )}
@@ -824,7 +1111,79 @@ export default function AdminDashboard() {
       </DashboardShell>
 
       {/* Form modal */}
-      {formMode && (
+      {formMode && activeTab === 'facilities' && (
+        <FacilityFormDialog
+          mode={formMode}
+          activeTab={activeTab}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+        />
+      )}
+      {formMode && activeTab === 'staff' && (
+        <StaffFormDialog
+          mode={formMode}
+          activeTab={activeTab}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+          staffList={items}
+        />
+      )}
+      {formMode && activeTab === 'testimonials' && (
+        <TestimonialFormDialog
+          mode={formMode}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+        />
+      )}
+      {formMode && activeTab === 'gallery' && (
+        <GalleryFormDialog
+          mode={formMode}
+          activeTab={activeTab}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+        />
+      )}
+      {formMode && activeTab === 'achievements' && (
+        <AchievementFormDialog
+          mode={formMode}
+          activeTab={activeTab}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+        />
+      )}
+      {formMode && activeTab === 'social' && (
+        <SocialFormDialog
+          mode={formMode}
+          activeTab={activeTab}
+          editingItem={editingItem}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={closeForm}
+          onSaved={fetchData}
+        />
+      )}
+      {formMode &&
+        activeTab !== 'facilities' &&
+        activeTab !== 'staff' &&
+        activeTab !== 'testimonials' &&
+        activeTab !== 'gallery' &&
+        activeTab !== 'achievements' &&
+        activeTab !== 'social' && (
         <CrudFormDialog
           mode={formMode}
           activeTab={activeTab}

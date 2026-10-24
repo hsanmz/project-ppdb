@@ -19,13 +19,17 @@ from src.main import app
 PPDB_KEYS = {
     "dashboard",
     "data-pendaftar",
-    "applicants",
-    "selection",
-    "mou",
-    "payments",
-    "diskonasi",
-    "stage2-pembayaran",
+    "verifikasi-dokumen",
+    "pembayaran-formulir",
+    "pembayaran-tahap2",
+    "sessions",
+    "penilaian",
+    "review-loa",
     "periods",
+    "pengumuman",
+    "rubrik",
+    "tiu-settings",
+    "arsip",
     "notifications",
 }
 CP_KEYS = {
@@ -40,10 +44,6 @@ CP_KEYS = {
     "social",
     "contact",
     "settings",
-    "ppdb-jalur",
-    "ppdb-pillars",
-    "ppdb-steps",
-    "ppdb-copy",
 }
 LEGACY_KEYS = {
     "admin-dashboard",
@@ -123,7 +123,7 @@ def test_page_permissions_roundtrip_and_key_contract(
 ) -> None:
     _login(client, "superadmin", "SuperAdmin123!.")
     page_ids = _page_ids_by_key(client)
-    picked = [page_ids["dashboard"], page_ids["periods"], page_ids["applicants"]]
+    picked = [page_ids["dashboard"], page_ids["periods"], page_ids["data-pendaftar"]]
 
     # superadmin assigns page permissions by id (superadmin panel contract)
     resp = client.put(
@@ -134,7 +134,7 @@ def test_page_permissions_roundtrip_and_key_contract(
     assert resp.status_code == 200
     assert sorted(resp.json()["page_ids"]) == sorted(picked)
 
-    EXPECTED_KEYS = ["applicants", "dashboard", "periods"]
+    EXPECTED_KEYS = ["dashboard", "data-pendaftar", "periods"]
 
     # the restricted admin sees page KEYS on login and profiles
     data = _login(client, "perm_user", "TesPass123")
@@ -149,7 +149,9 @@ def test_page_permissions_roundtrip_and_key_contract(
     assert resp.status_code == 200
     assert sorted(resp.json()["page_permissions"]) == EXPECTED_KEYS
 
-    # clearing the allow-list restores full access (empty array)
+    # clearing the allow-list restores full access: the server expands it to
+    # every page of the role's allowed modules (frontends treat an EMPTY list
+    # the same way -- no filtering), so the wire shows the expanded key set.
     _login(client, "superadmin", "SuperAdmin123!.")
     resp = client.put(
         f"/users/{restricted_user}/page-permissions", json={"page_ids": []}
@@ -159,4 +161,4 @@ def test_page_permissions_roundtrip_and_key_contract(
     _login(client, "perm_user", "TesPass123")
     resp = client.get("/auth/me")
     assert resp.status_code == 200
-    assert resp.json()["page_permissions"] == []
+    assert sorted(resp.json()["page_permissions"]) == sorted(PPDB_KEYS)

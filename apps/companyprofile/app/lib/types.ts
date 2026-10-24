@@ -128,7 +128,7 @@ export interface SocialLink {
   path: string
 }
 
-// ── Konten landing PPDB (dikelola dari CMS Company Profile) ─────────────
+// ── Konten statis landing PPDB (`app/lib/ppdbContent.ts`) ────────────────
 
 export interface PpdbJalurContent {
   order?: number
@@ -171,8 +171,7 @@ export interface PpdbStep {
 }
 
 export interface PpdbCopyContent {
-  // Copy hero 3D `/ppdb` — dikelola lewat entitas `ppdb-copy` (dipindah dari
-  // hardcode `components/ui/orbit-delivery-hero.tsx`).
+  // Copy hero 3D `/ppdb` — kini statis (lihat `ppdbContent.ts`).
   hero_title?: string
   hero_desc?: string
   /** Poin unggulan, item dipisah `|` — mis. "30 Juz | 2 Jenjang | 1 Ekosistem". */
@@ -193,11 +192,6 @@ export interface PpdbCopyContent {
   cta_primary_href?: string
   cta_secondary_label?: string
   cta_secondary_href?: string
-}
-
-export interface PpdbPageCopy {
-  id: string
-  content: PpdbCopyContent | null
 }
 
 export interface ContactInfo {

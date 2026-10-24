@@ -66,8 +66,17 @@ export default function AchievementsClient({ achievements }: { achievements: Ach
               const info = a.content ?? {}
               const scopeColors: Record<string, string> = {
                 International: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+                Internasional: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
                 National: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+                Nasional: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+                Regional: 'bg-teal-500/10 text-teal-500 border-teal-500/20',
                 Provincial: 'bg-green-500/10 text-green-500 border-green-500/20',
+                Provinsi: 'bg-green-500/10 text-green-500 border-green-500/20',
+                Kabupaten: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+                Kota: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+                Kecamatan: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+                Institusi: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+                'Institusi / Sekolah / Pesantren': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
               }
               return (
                 <div key={a.id} className="glass-card rounded-2xl overflow-hidden group">
